@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Illustrated IF Player</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&family=Literata:opsz,wght@7..72,400;7..72,600&family=MedievalSharp&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./css/theme.css" />
+</head>
+<body class="layout-illustrated-if">
+  <div class="atmosphere" aria-hidden="true"></div>
+
+  <header class="brand-rail" id="brand-rail">
+    <p class="brand-mark" id="brand-mark">Illustrated IF</p>
+    <h1 id="game-title">Loading…</h1>
+    <p class="byline" id="game-author"></p>
+  </header>
+
+  <section id="gate" class="gate" hidden>
+    <div class="gate-panel">
+      <h2 class="gate-heading">What is your name, traveler?</h2>
+      <form id="gate-form" class="gate-form">
+        <input id="player-name" type="text" autocomplete="nickname" maxlength="40" placeholder="Enter your name…" required />
+        <button type="submit" class="btn primary">Begin the Journey</button>
+      </form>
+      <button type="button" id="continue-btn" class="btn ghost" hidden>Continue saved path</button>
+    </div>
+  </section>
+
+  <!-- illustrated IF shell: art | story+choices+settings -->
+  <main id="novel" class="game-frame illustrated-if" hidden>
+    <section class="art-pane" id="art-pane" aria-label="Illustration">
+      <img id="stage-bg" class="stage-bg" alt="" />
+      <div class="stage-vignette" aria-hidden="true"></div>
+      <img id="sprite-left" class="sprite left" alt="" hidden />
+      <img id="sprite-right" class="sprite right" alt="" hidden />
+      <p class="art-credit" id="art-credit" hidden></p>
+    </section>
+
+    <section class="story-pane" aria-label="Story and actions">
+      <div class="pane-tabs" role="tablist">
+        <button type="button" class="tab active" data-tab="story" role="tab" aria-selected="true">Story</button>
+        <button type="button" class="tab" data-tab="settings" role="tab" aria-selected="false">Settings</button>
+      </div>
+
+      <div id="tab-story" class="tab-panel active">
+        <div id="speaker" class="speaker" hidden></div>
+        <div id="story-text" class="story-text" tabindex="0"></div>
+        <div id="choices" class="choice-grid" role="list"></div>
+        <div class="quick-utils">
+          <button type="button" id="btn-hide-art" class="btn choice-btn">Hide Image</button>
+          <button type="button" id="btn-rollback" class="btn choice-btn" title="Backspace">Back</button>
+          <button type="button" id="btn-skip" class="btn choice-btn" aria-pressed="false" title="Hold Ctrl / Cmd">Skip read</button>
+          <button type="button" id="btn-history" class="btn choice-btn">Review path</button>
+        </div>
+      </div>
+
+      <div id="tab-settings" class="tab-panel" hidden>
+        <label class="size-label">
+          Text size
+          <select id="text-size">
+            <option value="sm">Small</option>
+            <option value="md" selected>Medium</option>
+            <option value="lg">Large</option>
+          </select>
+        </label>
+        <button type="button" id="btn-abilities" class="btn utility">Abilities</button>
+
+        <section class="layout-panel" id="layout-panel" aria-label="Layout">
+          <h3 class="save-heading">Layout</h3>
+          <label class="size-label">
+            Presentation
+            <select id="layout-select">
+              <option value="illustrated-if">Illustrated IF (default)</option>
+              <option value="classic-adv">Classic ADV</option>
+              <option value="classic-nvl">Classic NVL</option>
+            </select>
+          </label>
+          <p class="settings-note" id="layout-note">Illustrated IF keeps art beside the story. ADV uses a bottom dialogue box; NVL uses a large text overlay. Theme default stays Illustrated IF.</p>
+        </section>
+
+        <section class="locale-panel" id="locale-panel" aria-label="Language" hidden>
+          <h3 class="save-heading">Language</h3>
+          <label class="size-label">
+            Display language
+            <select id="locale-select"></select>
+          </label>
+          <p class="settings-note">Overlays translate scene text and choices. Saves and skip-read still use the default language keys.</p>
+        </section>
+
+        <section class="audio-panel" id="audio-panel" aria-label="Audio">
+          <h3 class="save-heading">Audio</h3>
+          <label class="size-label audio-mute-row">
+            Mute all
+            <input type="checkbox" id="audio-mute" />
+          </label>
+          <label class="size-label">
+            Music (BGM)
+            <span class="audio-row">
+              <input type="range" id="audio-bgm" min="0" max="100" value="55" />
+              <span id="audio-bgm-val" class="audio-val">55%</span>
+            </span>
+          </label>
+          <label class="size-label">
+            Sound (SFX)
+            <span class="audio-row">
+              <input type="range" id="audio-sfx" min="0" max="100" value="75" />
+              <span id="audio-sfx-val" class="audio-val">75%</span>
+            </span>
+          </label>
+          <p class="settings-note">Optional. Missing audio files are skipped. Put tracks in <code>assets/audio/</code>.</p>
+        </section>
+
+        <section class="save-panel" id="save-panel" aria-label="Save slots">
+          <h3 class="save-heading">Save slots</h3>
+          <p class="settings-note" id="save-backend-note">Autosave continues in the background. Slots 1–5 for named checkpoints.</p>
+          <div id="save-slots" class="save-slots"></div>
+        </section>
+
+        <button type="button" id="btn-restart" class="btn utility danger">Restart</button>
+        <p class="settings-note">Back steps one scene (soft rewind). Skip read auto-advances scenes you’ve already visited — toggle the button or hold Ctrl/Cmd.</p>
+        <p class="settings-note">Illustrated text-based RPG — Illustrated IF is the default; ADV/NVL are optional presentation skins.</p>
+      </div>
+    </section>
+  </main>
+
+  <div id="ability-menu" class="modal" hidden>
+    <div class="modal-card">
+      <h3>Learned Abilities</h3>
+      <ul id="ability-list"></ul>
+      <button type="button" class="btn primary" id="ability-close">Close</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <p id="boot-error" class="boot-error" hidden></p>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>

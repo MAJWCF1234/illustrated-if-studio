@@ -1,0 +1,1 @@
+# Illustrated IF Studio Python engine (headless stub; pygame UI in Phase 2)

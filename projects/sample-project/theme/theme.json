@@ -1,0 +1,64 @@
+{
+  "id": "void-violet",
+  "fonts": {
+    "display": "MedievalSharp",
+    "ui": "Cinzel",
+    "body": "Literata"
+  },
+  "colors": {
+    "bg": "#050208",
+    "frame": "#6b21a8",
+    "stage": "#0a0612",
+    "panel": "#12081c",
+    "panelInner": "#1a0f2e",
+    "accent": "#a855f7",
+    "accentSoft": "#c084fc",
+    "text": "#f3e8ff",
+    "textOnLight": "#ede4ff",
+    "muted": "#a78bba",
+    "border": "#5b2d8e",
+    "speaker": "#e9d5ff",
+    "speakerBg": "#3b0764",
+    "choice": "#7c3aed",
+    "choiceHover": "#9333ea"
+  },
+  "layout": {
+    "mode": "illustrated-if",
+    "artRatio": 0.62,
+    "maxWidth": 1100,
+    "gameHeight": 620
+  },
+  "audio": {
+    "enabled": true,
+    "defaultBgm": null,
+    "channels": {
+      "bgm": { "volume": 0.55 },
+      "sfx": { "volume": 0.75 }
+    }
+  },
+  "templates": {
+    "scene": {
+      "id": "illustrated-if-default",
+      "label": "Illustrated IF (default)",
+      "artPosition": "left",
+      "choiceColumns": 2,
+      "showHotkeys": true,
+      "showSpeaker": true,
+      "showHideImage": true,
+      "choiceStyle": "filled",
+      "frameBorderPx": 3,
+      "storyRadiusPx": 8,
+      "artRatio": 0.62
+    },
+    "menu": {
+      "id": "gate-default",
+      "label": "Title gate (default)",
+      "gateStyle": "centered-card",
+      "showBrandMark": true,
+      "showByline": true,
+      "buttonStyle": "filled",
+      "titleAlign": "center",
+      "settingsLayout": "stack"
+    }
+  }
+}

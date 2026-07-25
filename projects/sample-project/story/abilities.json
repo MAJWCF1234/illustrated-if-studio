@@ -1,0 +1,10 @@
+{
+  "formatVersion": 1,
+  "abilities": {
+    "curiosity": {
+      "id": "curiosity",
+      "name": "Curiosity",
+      "description": "A sample ability, unlocked in the workshop, that opens the garden gate."
+    }
+  }
+}

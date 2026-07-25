@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Illustrated IF Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./css/editor.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">IF</span>
+      <div>
+        <strong id="project-title">Loading…</strong>
+        <small id="project-meta"></small>
+      </div>
+      <span class="format-pill" id="format-pill">Illustrated TB RPG</span>
+    </div>
+    <div class="actions">
+      <div class="mode-switch" role="tablist" aria-label="Editor workspace">
+        <button type="button" class="btn mode-btn active" id="mode-story" data-mode="story" role="tab" aria-selected="true">Story</button>
+        <button type="button" class="btn mode-btn" id="mode-design" data-mode="design" role="tab" aria-selected="false">Design</button>
+        <button type="button" class="btn mode-btn" id="mode-projects" data-mode="projects" role="tab" aria-selected="false">Projects</button>
+        <button type="button" class="btn mode-btn" id="mode-cli" data-mode="cli" role="tab" aria-selected="false">CLI</button>
+      </div>
+      <button type="button" id="btn-undo" class="btn" title="Ctrl+Z">Undo</button>
+      <button type="button" id="btn-redo" class="btn" title="Ctrl+Y">Redo</button>
+      <button type="button" id="btn-add" class="btn story-only">+ Scene</button>
+      <button type="button" id="btn-validate" class="btn">Validate</button>
+      <button type="button" id="btn-save" class="btn primary">Save</button>
+      <div class="export-menu" id="export-menu">
+        <button type="button" id="btn-export" class="btn" aria-haspopup="true" aria-expanded="false">Export ▾</button>
+        <div class="export-dropdown" id="export-dropdown" hidden>
+          <button type="button" data-export="html">HTML package (.zip)</button>
+          <button type="button" data-export="python">Python app + source (.zip)</button>
+          <button type="button" data-export="cpp">C++ / CMake + source (.zip)</button>
+          <button type="button" data-export="raw">Raw project folder</button>
+          <hr />
+          <button type="button" data-export="all">Export all targets</button>
+        </div>
+      </div>
+      <button type="button" id="btn-preview-toggle" class="btn">Preview</button>
+      <a class="btn link" href="/engine-html/" target="_blank" rel="noopener">Play ▶</a>
+    </div>
+  </header>
+
+  <div class="workspace" id="workspace-story">
+    <aside class="rail">
+      <div class="rail-head">
+        <span>Scenes</span>
+        <input id="scene-filter" type="search" placeholder="Filter…" />
+      </div>
+      <ul id="scene-list" class="scene-list"></ul>
+      <p class="rail-foot"><span id="scene-count">0</span> scenes</p>
+    </aside>
+
+    <section class="center-stack">
+      <section class="graph-pane">
+        <div class="graph-toolbar">
+          <button type="button" id="btn-fit" class="btn tiny">Fit</button>
+          <button type="button" id="btn-auto" class="btn tiny">Auto-layout</button>
+          <span id="graph-hint" class="hint">Drag nodes · drag ○ to link actions · scroll zoom</span>
+        </div>
+        <div id="graph-viewport" class="graph-viewport">
+          <svg id="graph" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#7e22ce" />
+              </marker>
+              <marker id="arrow-bad" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#e879f9" />
+              </marker>
+              <marker id="arrow-link" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#a855f7" />
+              </marker>
+            </defs>
+            <g id="graph-world"></g>
+          </svg>
+        </div>
+      </section>
+
+      <section id="preview-dock" class="preview-dock" hidden>
+        <div class="preview-toolbar">
+          <strong>Live play</strong>
+          <button type="button" id="btn-preview-here" class="btn tiny">From selected</button>
+          <button type="button" id="btn-preview-start" class="btn tiny">From start</button>
+          <button type="button" id="btn-preview-reload" class="btn tiny">Reload</button>
+          <button type="button" id="btn-preview-close" class="btn tiny">Hide</button>
+        </div>
+        <iframe id="preview-frame" title="Game preview" src="about:blank"></iframe>
+      </section>
+    </section>
+
+    <aside class="inspector" id="inspector">
+      <p class="empty" id="inspector-empty">Select a scene to edit its story, illustration, and actions.</p>
+
+      <div id="inspector-form" class="inspector-form" hidden>
+        <header class="scene-header">
+          <div class="scene-header-top">
+            <div>
+              <p class="scene-kicker">Editing scene</p>
+              <h2 id="scene-heading">—</h2>
+            </div>
+            <button type="button" id="btn-play-scene" class="btn tiny primary" title="Preview this scene">▶ Play beat</button>
+          </div>
+          <div class="scene-stats" id="scene-stats"></div>
+          <div class="scene-meta-row">
+            <label class="inline">ID
+              <input id="f-id" type="text" readonly />
+            </label>
+            <label class="inline grow">Speaker
+              <input id="f-speaker" type="text" placeholder="Narration if empty" />
+            </label>
+          </div>
+        </header>
+
+        <nav class="insp-tabs" role="tablist">
+          <button type="button" class="insp-tab active" data-insp="story" role="tab">Story</button>
+          <button type="button" class="insp-tab" data-insp="art" role="tab">Art</button>
+          <button type="button" class="insp-tab" data-insp="actions" role="tab">Actions</button>
+        </nav>
+
+        <section id="insp-story" class="insp-panel active">
+          <div class="manuscript-tools">
+            <button type="button" class="btn tiny" id="btn-insert-name" title="Insert player name token">Insert [NAME]</button>
+            <span id="word-count" class="muted-chip">0 words</span>
+          </div>
+          <textarea id="f-text" rows="14" placeholder="Write this beat’s story…"></textarea>
+          <label class="field">Unlock ability on enter
+            <input id="f-unlock" type="text" list="ability-ids" placeholder="optional, e.g. increased limits" />
+          </label>
+        </section>
+
+        <section id="insp-art" class="insp-panel" hidden>
+          <div class="art-preview drop-target" id="art-preview" data-art-slot="bg" aria-label="Illustration preview">
+            <img id="art-preview-bg" alt="" />
+            <img id="art-preview-left" class="prev-sprite left" alt="" hidden />
+            <img id="art-preview-right" class="prev-sprite right" alt="" hidden />
+            <p class="art-preview-empty" id="art-preview-empty">No illustration set — drop a background here</p>
+          </div>
+          <label class="field">Background
+            <input id="f-bg" type="text" list="scene-image-ids" placeholder="filename in assets/scene_images/" />
+          </label>
+          <div class="art-pair">
+            <label class="field drop-target" data-art-slot="left">Character left
+              <input id="f-left" type="text" list="character-ids" placeholder="optional" />
+            </label>
+            <label class="field drop-target" data-art-slot="right">Character right
+              <input id="f-right" type="text" list="character-ids" placeholder="optional" />
+            </label>
+          </div>
+
+          <div class="asset-browser" id="asset-browser">
+            <div class="asset-browser-head">
+              <h3>Asset browser</h3>
+              <div class="asset-browser-tools">
+                <button type="button" class="btn tiny active" data-asset-folder="scene_images">Backgrounds</button>
+                <button type="button" class="btn tiny" data-asset-folder="characters">Characters</button>
+                <label class="btn tiny asset-upload-btn">Upload
+                  <input type="file" id="asset-file-input" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" hidden />
+                </label>
+              </div>
+            </div>
+            <p class="insp-hint">Click a tile to assign · drag onto background / left / right · or drop files from your OS onto a slot</p>
+            <div class="asset-grid" id="asset-grid"></div>
+          </div>
+        </section>
+
+        <section id="insp-actions" class="insp-panel" hidden>
+          <div class="choices-head">
+            <p class="insp-hint">Player sees these as a 2-column action grid.</p>
+            <button type="button" id="btn-add-choice" class="btn tiny">+ Action</button>
+          </div>
+          <div id="choices-editor" class="actions-list"></div>
+        </section>
+
+        <footer class="insp-footer">
+          <button type="button" id="btn-delete" class="btn danger">Delete scene</button>
+        </footer>
+      </div>
+    </aside>
+  </div>
+
+  <div class="workspace design-workspace" id="workspace-design" hidden></div>
+
+  <div class="workspace projects-workspace" id="workspace-projects" hidden>
+    <section class="projects-pane">
+      <header class="projects-head">
+        <div>
+          <h2>Projects</h2>
+          <p class="insp-hint">Import a folder or legacy HTML game, switch the active project, and set where raw exports go.</p>
+        </div>
+      </header>
+
+      <div class="projects-grid">
+        <section class="projects-card">
+          <h3>New project</h3>
+          <label class="field">Title
+            <input id="proj-new-title" type="text" placeholder="My Illustrated Game" />
+          </label>
+          <div class="art-pair">
+            <label class="field">Id
+              <input id="proj-new-id" type="text" placeholder="my-game" spellcheck="false" />
+            </label>
+            <label class="field">Author
+              <input id="proj-new-author" type="text" placeholder="optional" />
+            </label>
+          </div>
+          <button type="button" class="btn primary" id="btn-proj-new">Create &amp; open</button>
+        </section>
+
+        <section class="projects-card">
+          <h3>Active project</h3>
+          <label class="field">Studio project
+            <select id="proj-active"></select>
+          </label>
+          <p class="muted-chip" id="proj-active-path"></p>
+          <div id="proj-recent" class="proj-recent" hidden></div>
+          <button type="button" class="btn primary" id="btn-proj-open">Reload editor on this project</button>
+        </section>
+
+        <section class="projects-card">
+          <h3>Export destination (raw projects)</h3>
+          <label class="field">Folder path
+            <input id="proj-export-dest" type="text" placeholder="e.g. C:\Users\You\Games\exports" spellcheck="false" />
+          </label>
+          <p class="insp-hint">Leave blank to use <code>dist/raw-projects</code> inside the studio. Applied when you export a raw project folder.</p>
+          <button type="button" class="btn" id="btn-proj-save-dest">Save destination</button>
+          <button type="button" class="btn primary" id="btn-proj-export-raw">Export raw project now</button>
+        </section>
+
+        <section class="projects-card">
+          <h3>Import project folder</h3>
+          <label class="field">Path to project folder (has project.json)
+            <input id="proj-import-folder" type="text" placeholder="C:\path\to\my-game" spellcheck="false" />
+          </label>
+          <label class="field">Optional new id
+            <input id="proj-import-folder-id" type="text" placeholder="my-game" spellcheck="false" />
+          </label>
+          <button type="button" class="btn primary" id="btn-proj-import-folder">Import folder</button>
+        </section>
+
+        <section class="projects-card">
+          <h3>Import legacy HTML / TXT</h3>
+          <label class="field">Path to file with <code>const scenes = {…}</code>
+            <input id="proj-import-html" type="text" placeholder="C:\path\to\game.html" spellcheck="false" />
+          </label>
+          <div class="art-pair">
+            <label class="field">Project id
+              <input id="proj-import-html-id" type="text" placeholder="imported-game" spellcheck="false" />
+            </label>
+            <label class="field">Title
+              <input id="proj-import-html-title" type="text" placeholder="My Game" />
+            </label>
+          </div>
+          <button type="button" class="btn primary" id="btn-proj-import-html">Import HTML game</button>
+        </section>
+      </div>
+    </section>
+  </div>
+
+  <div class="workspace cli-workspace" id="workspace-cli" hidden>
+    <section class="cli-pane">
+      <header class="cli-head">
+        <div>
+          <h2>Studio CLI</h2>
+          <p class="insp-hint">High-level commands against the running studio API. Type <code>help</code> or click a chip.</p>
+        </div>
+        <button type="button" class="btn" id="cli-clear">Clear</button>
+      </header>
+      <div class="cli-chips" id="cli-chips" role="list" aria-label="Command shortcuts"></div>
+      <pre class="cli-out" id="cli-out" aria-live="polite"></pre>
+      <form class="cli-input-row" id="cli-form" autocomplete="off">
+        <label class="cli-prompt" for="cli-input">if&gt;</label>
+        <input id="cli-input" type="text" spellcheck="false" placeholder="help · status · export raw --dest C:\Games" />
+        <button type="submit" class="btn primary">Run</button>
+      </form>
+    </section>
+  </div>
+
+  <datalist id="scene-ids"></datalist>
+  <datalist id="scene-image-ids"></datalist>
+  <datalist id="character-ids"></datalist>
+  <datalist id="ability-ids"></datalist>
+
+  <div id="toast" class="toast" hidden></div>
+  <dialog id="log-dialog">
+    <form method="dialog">
+      <h3 id="log-title">Output</h3>
+      <pre id="log-body"></pre>
+      <button class="btn primary" value="ok">Close</button>
+    </form>
+  </dialog>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>

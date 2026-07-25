@@ -1,0 +1,28 @@
+{
+  "formatVersion": 1,
+  "id": "sample-project",
+  "title": "Sample Project",
+  "author": "Illustrated IF Studio",
+  "genre": "illustrated-text-rpg",
+  "start": "start",
+  "story": {
+    "scenes": "story/scenes.json",
+    "characters": "story/characters.json",
+    "abilities": "story/abilities.json",
+    "scripts": "story/scripts.json"
+  },
+  "theme": "theme/theme.json",
+  "locales": {
+    "default": "en",
+    "available": [
+      { "id": "en", "label": "English" },
+      { "id": "es", "label": "Español", "file": "story/locales/es.json" }
+    ]
+  },
+  "meta": {
+    "keepAbilitiesOnRestart": true,
+    "layout": "illustrated-if",
+    "formatLabel": "Illustrated text-based RPG",
+    "artOptional": true
+  }
+}

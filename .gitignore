@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Export + build output (regenerate with `npm run export:all`)
+dist/
+build/
+
+# Machine-local studio state: active project, absolute export/import paths
+studio-settings.json
+
+# Editor autosave backups — git is the history now
+*.bak
+
+# Player save slots are runtime data; savesDir() recreates them on demand
+projects/*/saves/
+
+# Game content kept local-only — never committed to the platform repo.
+# The studio still discovers it on disk (listProjects reads projects/).
+projects/finding-secrets/
+
+# Archives and packaged builds
+*.zip
+
+# OS / editor cruft
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+*.swp

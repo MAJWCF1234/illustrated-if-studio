@@ -1,0 +1,47 @@
+{
+  "name": "illustrated-if-studio",
+  "version": "0.2.1",
+  "private": true,
+  "type": "module",
+  "main": "electron/main.mjs",
+  "description": "Illustrated text-based RPG studio — editor, player, and multi-target exporters",
+  "scripts": {
+    "start": "node server/index.mjs",
+    "dev": "node server/index.mjs",
+    "electron": "node node_modules/electron/cli.js .",
+    "electron:icon": "node electron/gen-icon.mjs",
+    "validate": "node scripts/validate-project.mjs projects/sample-project",
+    "export:html": "node server/cli.mjs export html",
+    "export:python": "node server/cli.mjs export python",
+    "export:cpp": "node server/cli.mjs export cpp",
+    "export:raw": "node server/cli.mjs export raw",
+    "export:all": "node server/cli.mjs export all",
+    "playtest": "node scripts/playtest-sample.mjs",
+    "smoke": "node scripts/smoke-exports.mjs",
+    "test:html": "node scripts/play-html-smoke.mjs",
+    "test:cli": "node scripts/cli-tab-smoke.mjs",
+    "test:electron": "node scripts/electron-backend-smoke.mjs",
+    "test:switch": "node scripts/project-switch-smoke.mjs",
+    "test:phase1": "node scripts/phase1-roadmap-smoke.mjs",
+    "test:saves": "node scripts/phase2-saves-smoke.mjs",
+    "test:saves-labels": "node scripts/phase4-saves-smoke.mjs",
+    "test:rollback": "node scripts/phase4-rollback-smoke.mjs",
+    "test:audio": "node scripts/phase4-audio-smoke.mjs",
+    "test:locale": "node scripts/phase4-locale-smoke.mjs",
+    "test:layout": "node scripts/phase4-layout-smoke.mjs",
+    "test:python-saves": "node scripts/run-python-saves-smoke.mjs",
+    "test:python-rollback": "node scripts/run-python-rollback-smoke.mjs",
+    "test:cpp": "node scripts/cpp-parity-smoke.mjs",
+    "build:python-exe": "node scripts/build-python-exe.mjs",
+    "bug-hunt": "node scripts/bug-hunt.mjs",
+    "check": "node scripts/run-checks.mjs",
+    "check:cpp": "node scripts/cpp-parity-smoke.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "optionalDependencies": {
+    "electron": "^37.10.3",
+    "playwright": "^1.62.0"
+  }
+}

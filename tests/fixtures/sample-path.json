@@ -1,0 +1,13 @@
+{
+  "project": "../projects/sample-project",
+  "steps": [
+    "Step into the workshop",
+    "Take the key and return",
+    "Follow the garden path",
+    "Open the gate with your curiosity"
+  ],
+  "expect": {
+    "scene": "ending",
+    "abilities": ["curiosity"]
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vn.studio/schemas/scene.schema.json",
+  "title": "Illustrated IF Studio Scene",
+  "type": "object",
+  "required": ["id", "text"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+    "sceneImage": { "type": ["string", "null"] },
+    "characterLeft": { "type": ["string", "null"] },
+    "characterRight": { "type": ["string", "null"] },
+    "speaker": { "type": ["string", "null"] },
+    "text": { "type": "string" },
+    "bgm": {
+      "type": ["string", "null", "boolean"],
+      "description": "Filename under assets/audio/ (looping). Omit to keep current; null/false/\"none\" to stop."
+    },
+    "sfx": {
+      "type": ["string", "null"],
+      "description": "One-shot filename under assets/audio/ played on scene enter."
+    },
+    "unlockAbility": { "type": ["string", "null"] },
+    "set": { "type": "object", "additionalProperties": true },
+    "hooks": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "choices": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["text", "next"],
+        "properties": {
+          "text": { "type": "string" },
+          "next": { "type": "string" },
+          "when": { "type": ["object", "null"] },
+          "set": { "type": ["object", "null"] },
+          "requiredAbility": {
+            "type": ["string", "null"],
+            "description": "Legacy ability-gate field; prefer when.hasAbility"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

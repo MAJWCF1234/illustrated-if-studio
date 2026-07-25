@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Validate + JS parity
+        run: npm run check
+      - name: Smoke exports (HTML/Python/C++ packages)
+        run: npm run smoke
+      - name: C++ export package shape
+        run: node scripts/cpp-parity-smoke.mjs
+
+  cpp-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ git
+      - name: Export, build, run parity fixture
+        env:
+          IF_CPP_FORCE_BUILD: "1"
+        run: node scripts/cpp-parity-smoke.mjs

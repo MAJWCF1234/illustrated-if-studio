@@ -1,0 +1,86 @@
+{
+  "formatVersion": 1,
+  "start": "start",
+  "scenes": {
+    "start": {
+      "id": "start",
+      "sceneImage": "default.svg",
+      "characterLeft": null,
+      "characterRight": null,
+      "speaker": null,
+      "text": "Welcome to the Sample Project — a tiny demo story shipped with Illustrated IF Studio.\n\nYou stand at the entrance of an old workshop. Dust drifts in the light. A door leads deeper inside, and a garden path curves away to your right.\n\nUse this project to test the editor, exporters, and players. Replace it with your own game whenever you like.",
+      "unlockAbility": null,
+      "choices": [
+        { "text": "Step into the workshop", "next": "workshop" },
+        { "text": "Follow the garden path", "next": "garden" },
+        { "text": "Look around", "next": "look_around" }
+      ]
+    },
+    "look_around": {
+      "id": "look_around",
+      "sceneImage": "default.svg",
+      "characterLeft": null,
+      "characterRight": null,
+      "speaker": "Guide",
+      "text": "A friendly voice speaks up: \"Everything you see here is editable. Scenes, choices, characters, abilities, art, audio, and theme all live under this project folder.\"",
+      "unlockAbility": null,
+      "choices": [
+        { "text": "Back to the entrance", "next": "start" }
+      ]
+    },
+    "workshop": {
+      "id": "workshop",
+      "sceneImage": "default.svg",
+      "characterLeft": null,
+      "characterRight": null,
+      "speaker": null,
+      "text": "Inside the workshop, tools hang in neat rows. On the bench rests a small brass key. Picking it up teaches you how the ability system works.",
+      "unlockAbility": "curiosity",
+      "choices": [
+        { "text": "Take the key and return", "next": "start" },
+        { "text": "Read the notes on the wall", "next": "archive" }
+      ]
+    },
+    "garden": {
+      "id": "garden",
+      "sceneImage": "default.svg",
+      "characterLeft": null,
+      "characterRight": null,
+      "speaker": null,
+      "text": "The garden opens into a quiet clearing. A locked gate stands at the far end.",
+      "unlockAbility": null,
+      "choices": [
+        {
+          "text": "Open the gate with your curiosity",
+          "next": "ending",
+          "when": { "hasAbility": "curiosity" }
+        },
+        { "text": "Head back to the entrance", "next": "start" }
+      ]
+    },
+    "archive": {
+      "id": "archive",
+      "sceneImage": "default.svg",
+      "characterLeft": null,
+      "characterRight": null,
+      "speaker": null,
+      "text": "The notes describe how to add scenes, wire choices, and export to HTML, Python, and C++. When you are ready, build something of your own.",
+      "unlockAbility": null,
+      "choices": [
+        { "text": "Back to the workshop", "next": "workshop" }
+      ]
+    },
+    "ending": {
+      "id": "ending",
+      "sceneImage": "default.svg",
+      "characterLeft": null,
+      "characterRight": null,
+      "speaker": null,
+      "text": "The gate swings open onto a bright horizon. That's the end of the sample story — now it's your turn to fill in the rest.",
+      "unlockAbility": null,
+      "choices": [
+        { "text": "Play again", "next": "start" }
+      ]
+    }
+  }
+}

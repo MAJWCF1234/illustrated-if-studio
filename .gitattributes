@@ -1,0 +1,17 @@
+* text=auto
+
+# Windows launchers must keep CRLF or cmd.exe mangles them
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# C++ / Python / JS sources normalize to LF in the repo
+*.mjs text eol=lf
+*.js  text eol=lf
+*.py  text eol=lf
+*.cpp text eol=lf
+*.hpp text eol=lf
+*.json text eol=lf
+
+*.png binary
+*.jpg binary
+*.zip binary

@@ -1,0 +1,41 @@
+{
+  "id": "es",
+  "label": "Español",
+  "scenes": {
+    "start": {
+      "text": "Bienvenido al Proyecto de Ejemplo, una pequeña historia de demostración incluida con Illustrated IF Studio.\n\nEstás a la entrada de un antiguo taller. El polvo flota en la luz. Una puerta conduce al interior y un sendero de jardín se curva a tu derecha.\n\nUsa este proyecto para probar el editor, los exportadores y los reproductores. Reemplázalo con tu propio juego cuando quieras.",
+      "choices": [
+        "Entrar al taller",
+        "Seguir el sendero del jardín",
+        "Mirar a tu alrededor"
+      ]
+    },
+    "look_around": {
+      "speaker": "Guía",
+      "text": "Una voz amable dice: «Todo lo que ves aquí es editable. Escenas, decisiones, personajes, habilidades, arte, audio y tema viven en la carpeta de este proyecto.»",
+      "choices": [
+        "Volver a la entrada"
+      ]
+    },
+    "workshop": {
+      "text": "Dentro del taller, las herramientas cuelgan en filas ordenadas. Sobre el banco descansa una pequeña llave de latón. Tomarla te enseña cómo funciona el sistema de habilidades.",
+      "choices": [
+        "Tomar la llave y regresar",
+        "Leer las notas en la pared"
+      ]
+    },
+    "garden": {
+      "text": "El jardín se abre a un claro tranquilo. Una verja cerrada se alza al fondo.",
+      "choices": [
+        "Abrir la verja con tu curiosidad",
+        "Regresar a la entrada"
+      ]
+    },
+    "ending": {
+      "text": "La verja se abre a un horizonte luminoso. Ese es el final de la historia de ejemplo; ahora te toca a ti completar el resto.",
+      "choices": [
+        "Jugar de nuevo"
+      ]
+    }
+  }
+}

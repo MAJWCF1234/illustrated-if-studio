@@ -1,0 +1,10 @@
+{
+  "formatVersion": 1,
+  "characters": {
+    "guide": {
+      "id": "guide",
+      "name": "Guide",
+      "color": "#c084fc"
+    }
+  }
+}
