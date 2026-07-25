@@ -16,8 +16,8 @@ Your own games live here too — add them from the editor **Projects** tab or CL
 
 ```bash
 npm start
-# or desktop:
-RUN-EDITOR.bat
+# or desktop (dev): npm run electron
+# or friendly launcher: double-click "Illustrated IF Studio.vbs"
 ```
 
 Raw export destination is set under **Projects** (or CLI `dest <path>`), default `dist/raw-projects/`.

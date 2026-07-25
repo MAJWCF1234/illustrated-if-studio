@@ -8,7 +8,9 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$Root = Split-Path -Parent $MyInvocation.MyCommand.Path
+# Lives in tools\emergency\ — studio root is two folders up.
+$here = Split-Path -Parent $MyInvocation.MyCommand.Path
+$Root = Split-Path -Parent (Split-Path -Parent $here)
 Set-Location $Root
 
 function Write-Step($msg) { Write-Host ">> $msg" -ForegroundColor Cyan }

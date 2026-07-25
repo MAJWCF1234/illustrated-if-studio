@@ -1,7 +1,9 @@
 # Illustrated IF Studio — install Node LTS (admin) for developing/running the studio
+# Lives in tools\emergency\ — studio root is two folders up.
 $ErrorActionPreference = "Stop"
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
-. (Join-Path $here "server\templates\windows\_common.ps1")
+$studioRoot = Split-Path -Parent (Split-Path -Parent $here)
+. (Join-Path $studioRoot "server\templates\windows\_common.ps1")
 
 if (Request-AdminElevation -ScriptPath $MyInvocation.MyCommand.Path) { exit 0 }
 
@@ -21,8 +23,7 @@ if (-not $nodeOk) {
 }
 
 Write-Host ""
-Write-Host "Start studio (browser):  npm start" -ForegroundColor Green
-Write-Host "  then open:             http://127.0.0.1:8787/editor-web/"
-Write-Host "Start studio (desktop):  .\RUN-EDITOR.bat" -ForegroundColor Green
-Write-Host "  (Electron window; installs Electron on first launch if needed)"
+Write-Host "All set. You can close this window and go back to the studio folder." -ForegroundColor Green
+Write-Host "Double-click 'Illustrated IF Studio' to open the studio." -ForegroundColor Green
+Write-Host "(Advanced/dev: 'npm start' for the browser editor, or tools\emergency\RUN-EDITOR.bat for the desktop app.)"
 Write-Done "Studio prerequisites ready."
