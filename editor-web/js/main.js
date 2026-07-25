@@ -768,7 +768,10 @@ function ensureCliMounted() {
     chips.appendChild(btn);
   }
 
-  cliAppend("Illustrated IF Studio CLI — type help or click a chip.", "meta");
+  cliAppend(
+    "Illustrated IF Studio CLI — pick a quick command on the right, or type help to see everything.",
+    "meta"
+  );
 
   document.getElementById("cli-clear").addEventListener("click", () => {
     out.innerHTML = "";
@@ -1070,9 +1073,9 @@ async function refreshProjectsPane() {
   if (recent.length) {
     recentEl.hidden = false;
     recentEl.innerHTML =
-      `<span class="insp-hint">Recent:</span> ` +
+      `<span class="insp-hint">Recently opened:</span> ` +
       recent
-        .map((id) => `<button type="button" class="btn tiny" data-recent="${escapeAttr(id)}">${escapeAttr(id)}</button>`)
+        .map((id) => `<button type="button" class="btn" data-recent="${escapeAttr(id)}">${escapeAttr(id)}</button>`)
         .join("");
     recentEl.querySelectorAll("[data-recent]").forEach((btn) => {
       btn.addEventListener("click", async () => {

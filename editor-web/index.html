@@ -46,7 +46,7 @@
     </div>
   </header>
 
-  <div class="workspace" id="workspace-story">
+  <div class="workspace story-workspace" id="workspace-story">
     <aside class="rail">
       <div class="rail-head">
         <span>Scenes</span>
@@ -186,79 +186,113 @@
   <div class="workspace design-workspace" id="workspace-design" hidden></div>
 
   <div class="workspace projects-workspace" id="workspace-projects" hidden>
-    <section class="projects-pane">
+    <div class="projects-pane">
       <header class="projects-head">
-        <div>
-          <h2>Projects</h2>
-          <p class="insp-hint">Import a folder or legacy HTML game, switch the active project, and set where raw exports go.</p>
-        </div>
+        <h2>Projects</h2>
+        <p class="projects-lede">
+          Each game you make lives in its own project folder. Pick the one you want to work on,
+          start a brand new one, or bring in a game you already have.
+        </p>
       </header>
 
-      <div class="projects-grid">
-        <section class="projects-card">
-          <h3>New project</h3>
-          <label class="field">Title
-            <input id="proj-new-title" type="text" placeholder="My Illustrated Game" />
-          </label>
-          <div class="art-pair">
-            <label class="field">Id
-              <input id="proj-new-id" type="text" placeholder="my-game" spellcheck="false" />
+      <section class="projects-section">
+        <h3 class="projects-section-title">Choose what you&rsquo;re working on</h3>
+        <div class="projects-grid two">
+          <article class="projects-card feature">
+            <header class="projects-card-head">
+              <h4>Open a project</h4>
+              <p class="insp-hint">Switch the editor over to another game. Save your work first &mdash; the editor reloads.</p>
+            </header>
+            <label class="field">Project
+              <select id="proj-active"></select>
             </label>
-            <label class="field">Author
-              <input id="proj-new-author" type="text" placeholder="optional" />
+            <div class="proj-path-row">
+              <span class="proj-path-label">Folder</span>
+              <code class="proj-path" id="proj-active-path"></code>
+            </div>
+            <div id="proj-recent" class="proj-recent" hidden></div>
+            <button type="button" class="btn primary block" id="btn-proj-open">Open this project</button>
+          </article>
+
+          <article class="projects-card feature">
+            <header class="projects-card-head">
+              <h4>Start a new project</h4>
+              <p class="insp-hint">Creates a small starter game you can rewrite scene by scene.</p>
+            </header>
+            <label class="field">Game title
+              <input id="proj-new-title" type="text" placeholder="My Illustrated Game" />
             </label>
-          </div>
-          <button type="button" class="btn primary" id="btn-proj-new">Create &amp; open</button>
-        </section>
+            <div class="art-pair">
+              <label class="field">Folder name
+                <input id="proj-new-id" type="text" placeholder="my-game" spellcheck="false" />
+              </label>
+              <label class="field">Author
+                <input id="proj-new-author" type="text" placeholder="optional" />
+              </label>
+            </div>
+            <button type="button" class="btn primary block" id="btn-proj-new">Create &amp; open</button>
+          </article>
+        </div>
+      </section>
 
-        <section class="projects-card">
-          <h3>Active project</h3>
-          <label class="field">Studio project
-            <select id="proj-active"></select>
-          </label>
-          <p class="muted-chip" id="proj-active-path"></p>
-          <div id="proj-recent" class="proj-recent" hidden></div>
-          <button type="button" class="btn primary" id="btn-proj-open">Reload editor on this project</button>
-        </section>
-
-        <section class="projects-card">
-          <h3>Export destination (raw projects)</h3>
-          <label class="field">Folder path
-            <input id="proj-export-dest" type="text" placeholder="e.g. C:\Users\You\Games\exports" spellcheck="false" />
-          </label>
-          <p class="insp-hint">Leave blank to use <code>dist/raw-projects</code> inside the studio. Applied when you export a raw project folder.</p>
-          <button type="button" class="btn" id="btn-proj-save-dest">Save destination</button>
-          <button type="button" class="btn primary" id="btn-proj-export-raw">Export raw project now</button>
-        </section>
-
-        <section class="projects-card">
-          <h3>Import project folder</h3>
-          <label class="field">Path to project folder (has project.json)
-            <input id="proj-import-folder" type="text" placeholder="C:\path\to\my-game" spellcheck="false" />
-          </label>
-          <label class="field">Optional new id
-            <input id="proj-import-folder-id" type="text" placeholder="my-game" spellcheck="false" />
-          </label>
-          <button type="button" class="btn primary" id="btn-proj-import-folder">Import folder</button>
-        </section>
-
-        <section class="projects-card">
-          <h3>Import legacy HTML / TXT</h3>
-          <label class="field">Path to file with <code>const scenes = {…}</code>
-            <input id="proj-import-html" type="text" placeholder="C:\path\to\game.html" spellcheck="false" />
-          </label>
-          <div class="art-pair">
-            <label class="field">Project id
-              <input id="proj-import-html-id" type="text" placeholder="imported-game" spellcheck="false" />
+      <section class="projects-section">
+        <h3 class="projects-section-title">Where finished games are saved</h3>
+        <div class="projects-grid one">
+          <article class="projects-card">
+            <header class="projects-card-head">
+              <h4>Export destination</h4>
+              <p class="insp-hint">The folder that receives a raw copy of your project when you export it.
+                Leave blank to use <code>dist/raw-projects</code> inside the studio.</p>
+            </header>
+            <label class="field">Folder path
+              <input id="proj-export-dest" type="text" placeholder="e.g. C:\Users\You\Games\exports" spellcheck="false" />
             </label>
-            <label class="field">Title
-              <input id="proj-import-html-title" type="text" placeholder="My Game" />
+            <div class="projects-actions">
+              <button type="button" class="btn" id="btn-proj-save-dest">Save destination</button>
+              <button type="button" class="btn primary" id="btn-proj-export-raw">Export raw project now</button>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="projects-section">
+        <h3 class="projects-section-title">Bring in a game you already have</h3>
+        <div class="projects-grid two">
+          <article class="projects-card">
+            <header class="projects-card-head">
+              <h4>Import a project folder</h4>
+              <p class="insp-hint">For folders that already contain a <code>project.json</code>.</p>
+            </header>
+            <label class="field">Path to the folder
+              <input id="proj-import-folder" type="text" placeholder="C:\path\to\my-game" spellcheck="false" />
             </label>
-          </div>
-          <button type="button" class="btn primary" id="btn-proj-import-html">Import HTML game</button>
-        </section>
-      </div>
-    </section>
+            <label class="field">New folder name (optional)
+              <input id="proj-import-folder-id" type="text" placeholder="my-game" spellcheck="false" />
+            </label>
+            <button type="button" class="btn primary block" id="btn-proj-import-folder">Import folder</button>
+          </article>
+
+          <article class="projects-card">
+            <header class="projects-card-head">
+              <h4>Import an older HTML game</h4>
+              <p class="insp-hint">For a single file containing <code>const scenes = {…}</code>.</p>
+            </header>
+            <label class="field">Path to the file
+              <input id="proj-import-html" type="text" placeholder="C:\path\to\game.html" spellcheck="false" />
+            </label>
+            <div class="art-pair">
+              <label class="field">Folder name
+                <input id="proj-import-html-id" type="text" placeholder="imported-game" spellcheck="false" />
+              </label>
+              <label class="field">Title
+                <input id="proj-import-html-title" type="text" placeholder="My Game" />
+              </label>
+            </div>
+            <button type="button" class="btn primary block" id="btn-proj-import-html">Import HTML game</button>
+          </article>
+        </div>
+      </section>
+    </div>
   </div>
 
   <div class="workspace cli-workspace" id="workspace-cli" hidden>
@@ -266,17 +300,25 @@
       <header class="cli-head">
         <div>
           <h2>Studio CLI</h2>
-          <p class="insp-hint">High-level commands against the running studio API. Type <code>help</code> or click a chip.</p>
+          <p class="insp-hint">An optional shortcut panel. Click a quick command on the right, or type one below &mdash; nothing here can break your game.</p>
         </div>
         <button type="button" class="btn" id="cli-clear">Clear</button>
       </header>
-      <div class="cli-chips" id="cli-chips" role="list" aria-label="Command shortcuts"></div>
-      <pre class="cli-out" id="cli-out" aria-live="polite"></pre>
-      <form class="cli-input-row" id="cli-form" autocomplete="off">
-        <label class="cli-prompt" for="cli-input">if&gt;</label>
-        <input id="cli-input" type="text" spellcheck="false" placeholder="help · status · export raw --dest C:\Games" />
-        <button type="submit" class="btn primary">Run</button>
-      </form>
+      <div class="cli-body">
+        <div class="cli-main">
+          <pre class="cli-out" id="cli-out" aria-live="polite"></pre>
+          <form class="cli-input-row" id="cli-form" autocomplete="off">
+            <label class="cli-prompt" for="cli-input">if&gt;</label>
+            <input id="cli-input" type="text" spellcheck="false" placeholder="Type a command, e.g. status" />
+            <button type="submit" class="btn primary">Run</button>
+          </form>
+        </div>
+        <aside class="cli-side">
+          <h3>Quick commands</h3>
+          <div class="cli-chips" id="cli-chips" role="list" aria-label="Command shortcuts"></div>
+          <p class="insp-hint">Click one to run it. Press <kbd>↑</kbd> / <kbd>↓</kbd> to reuse earlier commands, or type <code>help</code> for the full list.</p>
+        </aside>
+      </div>
     </section>
   </div>
 
