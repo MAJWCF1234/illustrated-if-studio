@@ -10,7 +10,14 @@ project(illustrated_if LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# CMake 4.x drops compatibility with sub-projects that request very old
+# policy versions (raylib/glfw). This keeps FetchContent'd deps configuring.
+if(NOT DEFINED CMAKE_POLICY_VERSION_MINIMUM)
+  set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+endif()
+
 include(FetchContent)
+
 FetchContent_Declare(
   json
   GIT_REPOSITORY https://github.com/nlohmann/json.git
@@ -20,13 +27,32 @@ FetchContent_Declare(
 set(JSON_BuildTests OFF CACHE INTERNAL "")
 FetchContent_MakeAvailable(json)
 
+# raylib — graphical player. Pinned tag; fetched + built from source so the
+# package builds out of the box with no manual library install.
+FetchContent_Declare(
+  raylib
+  GIT_REPOSITORY https://github.com/raysan5/raylib.git
+  GIT_TAG 5.5
+  GIT_SHALLOW TRUE
+)
+set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(BUILD_GAMES OFF CACHE BOOL "" FORCE)
+set(CUSTOMIZE_BUILD OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(raylib)
+
 add_executable(illustrated_if
   src/main.cpp
   src/runtime.cpp
   src/saves.cpp
 )
 target_include_directories(illustrated_if PRIVATE include)
-target_link_libraries(illustrated_if PRIVATE nlohmann_json::nlohmann_json)
+target_link_libraries(illustrated_if PRIVATE nlohmann_json::nlohmann_json raylib)
+
+# MSVC: use a GUI subsystem entry point so no console window pops up for the
+# graphical player, but still allow console output for the --script path.
+if(MSVC)
+  target_compile_definitions(illustrated_if PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
 
 add_custom_command(TARGET illustrated_if POST_BUILD
   COMMAND \${CMAKE_COMMAND} -E copy_directory
@@ -490,10 +516,14 @@ nlohmann::json Runtime::importSlotFromFile(int slot, const std::string& inPath) 
 `;
 
 const MAIN_CPP = `#include "runtime.hpp"
-#include <iostream>
+#include "raylib.h"
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
 #include <fstream>
-#include <limits>
+#include <iostream>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 static std::filesystem::path find_project(const std::string& overridePath) {
@@ -552,184 +582,374 @@ static int run_script(ifs::Runtime& rt, const std::filesystem::path& scriptPath)
   return 0;
 }
 
-static void print_help_line() {
-  std::cout << "  [1-9] choice  [B]ack  [K]skip-read  [A]bilities  [S]ave  [L]oad  [E]xport  [I]mport  [H]istory  [R]estart  [Q]uit\\n> ";
+// ---------------------------------------------------------------------------
+// Graphical player (raylib). Kept fully separate from the runtime/logic layer
+// above so the headless --script parity path never touches windowing code.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+struct Theme {
+  Color bg{5, 2, 8, 255};
+  Color stage{10, 6, 18, 255};
+  Color panel{18, 8, 28, 255};
+  Color panelInner{26, 15, 46, 255};
+  Color accent{168, 85, 247, 255};
+  Color accentSoft{192, 132, 252, 255};
+  Color text{243, 232, 255, 255};
+  Color muted{167, 139, 186, 255};
+  Color border{91, 45, 142, 255};
+  Color speaker{233, 213, 255, 255};
+  Color speakerBg{59, 7, 100, 255};
+  Color choice{124, 58, 237, 255};
+  Color choiceHover{147, 51, 234, 255};
+};
+
+Color hex_color(const std::string& hex, Color fallback) {
+  if (hex.size() < 7 || hex[0] != '#') return fallback;
+  auto conv = [&](int i) -> int { return std::stoi(hex.substr(i, 2), nullptr, 16); };
+  try {
+    return Color{(unsigned char)conv(1), (unsigned char)conv(3), (unsigned char)conv(5), 255};
+  } catch (...) {
+    return fallback;
+  }
 }
 
-int run_interactive(ifs::Runtime& rt) {
-  const auto title = rt.project().value("title", "Illustrated IF");
-  const auto author = rt.project().value("author", "");
-  std::cout << "========================================\\n";
-  std::cout << title << "\\n";
-  if (!author.empty()) std::cout << "by " << author << "\\n";
-  std::cout << "Illustrated text-based RPG (console)\\n";
-  std::cout << "========================================\\n\\n";
-  std::cout << "Your name [" << rt.state().playerName << "]: ";
-  {
-    std::string name;
-    std::getline(std::cin, name);
-    if (!name.empty()) rt.state().playerName = name;
+Theme load_theme(const ifs::Runtime& rt) {
+  Theme t;
+  try {
+    std::string rel = rt.project().value("theme", std::string("theme/theme.json"));
+    std::ifstream in(rt.projectDir() / rel);
+    if (in) {
+      nlohmann::json j;
+      in >> j;
+      if (j.contains("colors") && j.at("colors").is_object()) {
+        const auto& c = j.at("colors");
+        auto g = [&](const char* k, Color d) -> Color {
+          return (c.contains(k) && c.at(k).is_string()) ? hex_color(c.at(k).get<std::string>(), d) : d;
+        };
+        t.bg = g("bg", t.bg);
+        t.stage = g("stage", t.stage);
+        t.panel = g("panel", t.panel);
+        t.panelInner = g("panelInner", t.panelInner);
+        t.accent = g("accent", t.accent);
+        t.accentSoft = g("accentSoft", t.accentSoft);
+        t.text = g("text", t.text);
+        t.muted = g("muted", t.muted);
+        t.border = g("border", t.border);
+        t.speaker = g("speaker", t.speaker);
+        t.speakerBg = g("speakerBg", t.speakerBg);
+        t.choice = g("choice", t.choice);
+        t.choiceHover = g("choiceHover", t.choiceHover);
+      }
+    }
+  } catch (...) {
+  }
+  return t;
+}
+
+bool ends_with_svg(const std::string& file) {
+  if (file.size() < 4) return false;
+  std::string ext = file.substr(file.size() - 4);
+  std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char ch) { return (char)std::tolower(ch); });
+  return ext == ".svg";
+}
+
+// Texture cache. Missing / SVG / unreadable files are cached as an empty
+// texture (id 0) so we fall back to a themed rectangle instead of retrying.
+class AssetCache {
+ public:
+  explicit AssetCache(std::filesystem::path projectDir) : dir_(std::move(projectDir)) {}
+  ~AssetCache() {
+    for (auto& kv : cache_)
+      if (kv.second.id != 0) UnloadTexture(kv.second);
   }
 
-  while (true) {
-    const auto& scene = rt.currentScene();
-    std::cout << "\\n----------------------------------------\\n";
-    if (scene.contains("speaker") && scene.at("speaker").is_string() &&
-        !scene.at("speaker").get<std::string>().empty()) {
-      std::cout << rt.interpolate(scene.at("speaker").get<std::string>()) << "\\n\\n";
+  Texture2D* get(const std::string& sub, const std::string& file) {
+    if (file.empty() || ends_with_svg(file)) return nullptr;
+    const std::string key = sub + "/" + file;
+    auto it = cache_.find(key);
+    if (it != cache_.end()) return it->second.id != 0 ? &it->second : nullptr;
+    const auto path = dir_ / "assets" / sub / file;
+    Texture2D tex{};
+    if (std::filesystem::exists(path)) {
+      tex = LoadTexture(path.string().c_str());
+      if (tex.id != 0) SetTextureFilter(tex, TEXTURE_FILTER_BILINEAR);
     }
-    std::cout << rt.interpolate(scene.value("text", "")) << "\\n\\n";
+    cache_[key] = tex;
+    return tex.id != 0 ? &cache_[key] : nullptr;
+  }
 
-    auto choices = rt.visibleChoices();
-    if (choices.empty()) {
-      std::cout << "(No more actions from here.)\\n";
+ private:
+  std::filesystem::path dir_;
+  std::unordered_map<std::string, Texture2D> cache_;
+};
+
+std::string scene_string(const nlohmann::json& scene, const char* key) {
+  if (scene.contains(key) && scene.at(key).is_string()) return scene.at(key).get<std::string>();
+  return {};
+}
+
+std::vector<std::string> wrap_text(Font font, const std::string& text, float fontSize, float spacing,
+                                   float maxWidth) {
+  std::vector<std::string> lines;
+  std::string line, word;
+  auto width = [&](const std::string& s) { return MeasureTextEx(font, s.c_str(), fontSize, spacing).x; };
+  auto flush_word = [&]() {
+    if (word.empty()) return;
+    const std::string cand = line.empty() ? word : line + " " + word;
+    if (line.empty() || width(cand) <= maxWidth) {
+      line = cand;
     } else {
-      for (std::size_t i = 0; i < choices.size(); ++i) {
-        std::cout << "  [" << (i + 1) << "] " << choices[i].text << "\\n";
-      }
+      lines.push_back(line);
+      line = word;
     }
-    print_help_line();
-    std::string line;
-    if (!std::getline(std::cin, line)) break;
-    if (line.empty()) continue;
-    char c0 = line[0];
-    if (c0 == 'q' || c0 == 'Q') break;
-    if (c0 == 'r' || c0 == 'R') {
-      rt.restart();
-      continue;
-    }
-    if (c0 == 'a' || c0 == 'A') {
-      auto abs = rt.abilityList();
-      std::cout << "Abilities:\\n";
-      if (abs.empty()) std::cout << "  (none yet)\\n";
-      for (const auto& a : abs) std::cout << "  - " << a << "\\n";
-      continue;
-    }
-    if (c0 == 'b' || c0 == 'B') {
-      try {
-        rt.rollback();
-        std::cout << "Rolled back.\\n";
-      } catch (const std::exception& ex) {
-        std::cout << ex.what() << "\\n";
-      }
-      continue;
-    }
-    if (c0 == 'k' || c0 == 'K') {
-      int hops = 0;
-      while (rt.skipIfRead()) ++hops;
-      if (hops == 0) std::cout << "Skip stopped (unread or branching).\\n";
-      else std::cout << "Skipped " << hops << " read scene(s).\\n";
-      continue;
-    }
-    if (c0 == 'h' || c0 == 'H') {
-      std::cout << "History (" << rt.state().history.size() << "):\\n";
-      for (const auto& h : rt.state().history) {
-        std::cout << "  " << h.id;
-        if (!h.choice.empty()) std::cout << " ← " << h.choice;
-        std::cout << "\\n";
-      }
-      continue;
-    }
-    if (c0 == 's' || c0 == 'S') {
-      std::cout << "Save to slot 1-5: ";
-      std::string s;
-      std::getline(std::cin, s);
-      std::cout << "Label (blank = default): ";
-      std::string label;
-      std::getline(std::cin, label);
-      try {
-        int slot = std::stoi(s);
-        rt.saveToSlot(slot, label);
-        std::cout << "Saved slot " << slot << "\\n";
-      } catch (const std::exception& ex) {
-        std::cout << "Save failed: " << ex.what() << "\\n";
-      }
-      continue;
-    }
-    if (c0 == 'e' || c0 == 'E') {
-      std::cout << "Export slot 1-5: ";
-      std::string s;
-      std::getline(std::cin, s);
-      std::cout << "To file path: ";
-      std::string dest;
-      std::getline(std::cin, dest);
-      try {
-        rt.exportSlotToFile(std::stoi(s), dest);
-        std::cout << "Exported to " << dest << "\\n";
-      } catch (const std::exception& ex) {
-        std::cout << "Export failed: " << ex.what() << "\\n";
-      }
-      continue;
-    }
-    if (c0 == 'i' || c0 == 'I') {
-      std::cout << "Import into slot 1-5: ";
-      std::string s;
-      std::getline(std::cin, s);
-      std::cout << "From file path: ";
-      std::string src;
-      std::getline(std::cin, src);
-      try {
-        rt.importSlotFromFile(std::stoi(s), src);
-        std::cout << "Imported into slot " << s << "\\n";
-      } catch (const std::exception& ex) {
-        std::cout << "Import failed: " << ex.what() << "\\n";
-      }
-      continue;
-    }
-    if (c0 == 'l' || c0 == 'L') {
-      auto slots = rt.listSaveSlots();
-      for (const auto& info : slots) {
-        std::cout << "  Slot " << info.at("slot").get<int>() << ": ";
-        if (info.value("empty", false)) std::cout << "empty";
-        else if (info.value("corrupt", false)) std::cout << "corrupt";
-        else
-          std::cout << info.value("playerName", "") << " · " << info.value("currentScene", "");
-        std::cout << "\\n";
-      }
-      std::cout << "Load slot 1-5: ";
-      std::string s;
-      std::getline(std::cin, s);
-      try {
-        int slot = std::stoi(s);
-        rt.loadFromSlot(slot);
-        std::cout << "Loaded slot " << slot << "\\n";
-      } catch (const std::exception& ex) {
-        std::cout << "Load failed: " << ex.what() << "\\n";
-      }
-      continue;
-    }
-    if (choices.empty()) continue;
-    try {
-      const int n = std::stoi(line);
-      if (n >= 1 && static_cast<std::size_t>(n) <= choices.size()) {
-        rt.choose(static_cast<std::size_t>(n - 1));
-      }
-    } catch (...) {
-      std::cout << "Enter a number, A/S/L/H/R, or Q.\\n";
+    word.clear();
+  };
+  for (char ch : text) {
+    if (ch == '\\n') {
+      flush_word();
+      lines.push_back(line);
+      line.clear();
+    } else if (ch == ' ') {
+      flush_word();
+    } else {
+      word.push_back(ch);
     }
   }
+  flush_word();
+  lines.push_back(line);
+  return lines;
+}
+
+Font load_ui_font() {
+  // Load Basic Latin + Latin-1 + Latin Extended-A + common typographic
+  // punctuation so accented locales and smart dashes/quotes render. raylib's
+  // default font only carries ASCII, which turns "—" or "ñ" into "?".
+  std::vector<int> cps;
+  for (int c = 32; c <= 0x17F; ++c) cps.push_back(c);
+  for (int c : {0x2010, 0x2011, 0x2012, 0x2013, 0x2014, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2026})
+    cps.push_back(c);
+  const char* candidates[] = {
+      "C:/Windows/Fonts/segoeui.ttf",
+      "C:/Windows/Fonts/arial.ttf",
+      "/System/Library/Fonts/SFNS.ttf",
+      "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+  };
+  for (const char* c : candidates) {
+    if (FileExists(c)) {
+      Font f = LoadFontEx(c, 48, cps.data(), (int)cps.size());
+      if (f.texture.id != 0) {
+        SetTextureFilter(f.texture, TEXTURE_FILTER_BILINEAR);
+        return f;
+      }
+    }
+  }
+  return GetFontDefault();
+}
+
+void draw_background(AssetCache& assets, const std::string& file, Rectangle stage, const Theme& t) {
+  Texture2D* tex = assets.get("scene_images", file);
+  if (tex) {
+    const float scale = std::max(stage.width / tex->width, stage.height / tex->height);
+    const float w = tex->width * scale;
+    const float h = tex->height * scale;
+    Rectangle src{0, 0, (float)tex->width, (float)tex->height};
+    Rectangle dst{stage.x + (stage.width - w) / 2.0f, stage.y + (stage.height - h) / 2.0f, w, h};
+    BeginScissorMode((int)stage.x, (int)stage.y, (int)stage.width, (int)stage.height);
+    DrawTexturePro(*tex, src, dst, {0, 0}, 0.0f, WHITE);
+    EndScissorMode();
+  } else {
+    // Themed fallback (missing art or SVG which raylib cannot decode).
+    DrawRectangleGradientV((int)stage.x, (int)stage.y, (int)stage.width, (int)stage.height, t.stage,
+                           t.panelInner);
+  }
+}
+
+void draw_sprite(AssetCache& assets, const std::string& file, Rectangle stage, bool left) {
+  Texture2D* tex = assets.get("characters", file);
+  if (!tex) return;  // missing sprite -> hidden (matches HTML engine)
+  const float h = stage.height * 0.92f;
+  const float scale = h / tex->height;
+  const float w = tex->width * scale;
+  const float y = stage.y + stage.height - h;
+  const float margin = stage.width * 0.02f;
+  const float x = left ? stage.x + margin : stage.x + stage.width - w - margin;
+  Rectangle src{0, 0, (float)tex->width, (float)tex->height};
+  Rectangle dst{x, y, w, h};
+  DrawTexturePro(*tex, src, dst, {0, 0}, 0.0f, WHITE);
+}
+
+int run_graphical(ifs::Runtime& rt) {
+  const std::string title = rt.project().value("title", std::string("Illustrated IF"));
+  const std::string author = rt.project().value("author", std::string(""));
+
+  SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
+  InitWindow(1100, 700, title.c_str());
+  SetWindowMinSize(720, 520);
+  SetExitKey(0);  // don't let ESC hard-close; we handle quit explicitly
+  SetTargetFPS(60);
+
+  const Theme theme = load_theme(rt);
+  Font font = load_ui_font();
+  AssetCache assets(rt.projectDir());
+
+  enum class Screen { Gate, Scene };
+  Screen screen = Screen::Gate;
+  std::string name = rt.state().playerName.empty() ? std::string("Traveler") : rt.state().playerName;
+
+  bool quit = false;
+  while (!WindowShouldClose() && !quit) {
+    const int W = GetScreenWidth();
+    const int H = GetScreenHeight();
+    const Vector2 mouse = GetMousePosition();
+    const bool clicked = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+
+    BeginDrawing();
+    ClearBackground(theme.bg);
+
+    if (screen == Screen::Gate) {
+      int ch = GetCharPressed();
+      while (ch > 0) {
+        if (ch >= 32 && ch <= 125 && name.size() < 24) name.push_back((char)ch);
+        ch = GetCharPressed();
+      }
+      if (IsKeyPressed(KEY_BACKSPACE) && !name.empty()) name.pop_back();
+      const bool begin = IsKeyPressed(KEY_ENTER);
+
+      DrawRectangleGradientV(0, 0, W, H, theme.bg, theme.stage);
+      const float tSize = 56.0f;
+      Vector2 tw = MeasureTextEx(font, title.c_str(), tSize, 2.0f);
+      DrawTextEx(font, title.c_str(), {(W - tw.x) / 2.0f, H * 0.22f}, tSize, 2.0f, theme.text);
+      if (!author.empty()) {
+        std::string by = "by " + author;
+        Vector2 aw = MeasureTextEx(font, by.c_str(), 24.0f, 1.0f);
+        DrawTextEx(font, by.c_str(), {(W - aw.x) / 2.0f, H * 0.22f + tSize + 6}, 24.0f, 1.0f, theme.muted);
+      }
+
+      const char* prompt = "Your name:";
+      Vector2 pw = MeasureTextEx(font, prompt, 22.0f, 1.0f);
+      const float boxW = 360.0f, boxH = 52.0f;
+      const float boxX = (W - boxW) / 2.0f, boxY = H * 0.5f;
+      DrawTextEx(font, prompt, {(W - pw.x) / 2.0f, boxY - 34}, 22.0f, 1.0f, theme.muted);
+      DrawRectangleRounded({boxX, boxY, boxW, boxH}, 0.3f, 8, theme.panelInner);
+      DrawRectangleRoundedLines({boxX, boxY, boxW, boxH}, 0.3f, 8, theme.accent);
+      std::string shown = name;
+      if (((int)(GetTime() * 2)) % 2 == 0) shown += "_";
+      DrawTextEx(font, shown.c_str(), {boxX + 16, boxY + 13}, 26.0f, 1.0f, theme.text);
+
+      const char* hint = "Press ENTER to begin";
+      Vector2 hw = MeasureTextEx(font, hint, 20.0f, 1.0f);
+      Rectangle btn{(W - 220.0f) / 2.0f, boxY + boxH + 28, 220.0f, 48.0f};
+      const bool hover = CheckCollisionPointRec(mouse, btn);
+      DrawRectangleRounded(btn, 0.4f, 8, hover ? theme.choiceHover : theme.choice);
+      DrawTextEx(font, hint, {btn.x + (btn.width - hw.x) / 2.0f, btn.y + 13}, 20.0f, 1.0f, theme.text);
+
+      if (begin || (hover && clicked)) {
+        rt.state().playerName = name.empty() ? std::string("Traveler") : name;
+        screen = Screen::Scene;
+      }
+      EndDrawing();
+      continue;
+    }
+
+    // ---- Scene screen ----
+    const auto& scene = rt.currentScene();
+    auto choices = rt.visibleChoices();
+
+    const Rectangle stage{0, 0, (float)W, H * 0.52f};
+    draw_background(assets, scene_string(scene, "sceneImage"), stage, theme);
+    draw_sprite(assets, scene_string(scene, "characterLeft"), stage, true);
+    draw_sprite(assets, scene_string(scene, "characterRight"), stage, false);
+
+    // Bottom panel
+    const float panelY = stage.height;
+    const float panelH = H - panelY;
+    DrawRectangle(0, (int)panelY, W, (int)panelH, theme.panel);
+    DrawRectangle(0, (int)panelY, W, 3, theme.accent);
+
+    const float pad = 28.0f;
+    float cursorY = panelY + pad;
+    const float contentW = W - pad * 2.0f;
+
+    const std::string speaker = rt.interpolate(scene_string(scene, "speaker"));
+    if (!speaker.empty()) {
+      Vector2 sw = MeasureTextEx(font, speaker.c_str(), 24.0f, 1.0f);
+      DrawRectangleRounded({pad - 8, cursorY - 4, sw.x + 24, 34}, 0.5f, 8, theme.speakerBg);
+      DrawTextEx(font, speaker.c_str(), {pad + 4, cursorY}, 24.0f, 1.0f, theme.speaker);
+      cursorY += 44;
+    }
+
+    const std::string body = rt.interpolate(scene.value("text", std::string("")));
+    const float bodySize = 22.0f;
+    auto lines = wrap_text(font, body, bodySize, 1.0f, contentW);
+    for (const auto& ln : lines) {
+      DrawTextEx(font, ln.c_str(), {pad, cursorY}, bodySize, 1.0f, theme.text);
+      cursorY += bodySize + 6;
+    }
+    cursorY += 12;
+
+    // Choice buttons (mouse + number-key hotkeys)
+    const float btnH = 44.0f;
+    for (std::size_t i = 0; i < choices.size(); ++i) {
+      Rectangle btn{pad, cursorY, contentW, btnH};
+      const bool hover = CheckCollisionPointRec(mouse, btn);
+      DrawRectangleRounded(btn, 0.25f, 8, hover ? theme.choiceHover : theme.choice);
+      const std::string label = std::to_string(i + 1) + ".  " + rt.interpolate(choices[i].text);
+      DrawTextEx(font, label.c_str(), {btn.x + 16, btn.y + 11}, 21.0f, 1.0f, theme.text);
+      const bool key = (i < 9) && IsKeyPressed(KEY_ONE + (int)i);
+      if ((hover && clicked) || key) {
+        rt.choose(i);
+        break;
+      }
+      cursorY += btnH + 10;
+    }
+
+    if (choices.empty()) {
+      DrawTextEx(font, "The End.  Press R to play again.", {pad, cursorY}, 22.0f, 1.0f, theme.muted);
+    }
+
+    // Footer hint + global keys
+    const char* footer = "[1-9] choose   [Backspace] back   [R] restart   [Esc] quit";
+    DrawTextEx(font, footer, {pad, (float)H - 26}, 16.0f, 1.0f, theme.muted);
+
+    if (IsKeyPressed(KEY_R)) rt.restart();
+    if (IsKeyPressed(KEY_BACKSPACE) && rt.canRollback()) rt.rollback();
+    if (IsKeyPressed(KEY_ESCAPE)) quit = true;
+
+    EndDrawing();
+  }
+
+  if (font.texture.id != GetFontDefault().texture.id) UnloadFont(font);
+  CloseWindow();
   return 0;
 }
+
+}  // namespace
 
 int main(int argc, char** argv) {
   try {
     std::string projectPath;
     std::string scriptPath;
-    std::string playerName = "Parity";
+    std::string playerName;
+    bool haveName = false;
     for (int i = 1; i < argc; ++i) {
       std::string a = argv[i];
       if ((a == "--project" || a == "-p") && i + 1 < argc) projectPath = argv[++i];
       else if ((a == "--script" || a == "-s") && i + 1 < argc) scriptPath = argv[++i];
-      else if ((a == "--name" || a == "-n") && i + 1 < argc) playerName = argv[++i];
+      else if ((a == "--name" || a == "-n") && i + 1 < argc) { playerName = argv[++i]; haveName = true; }
       else if (a == "--help" || a == "-h") {
         std::cout << "Usage: illustrated_if [--project DIR] [--script fixture.json] [--name Name]\\n";
         return 0;
       }
     }
     ifs::Runtime rt(find_project(projectPath));
-    rt.state().playerName = playerName;
-    if (!scriptPath.empty()) return run_script(rt, scriptPath);
-    return run_interactive(rt);
+    if (haveName) rt.state().playerName = playerName;
+    if (!scriptPath.empty()) {
+      if (!haveName) rt.state().playerName = "Parity";
+      return run_script(rt, scriptPath);  // headless: never opens a window
+    }
+    return run_graphical(rt);
   } catch (const std::exception& ex) {
     std::cerr << "Error: " << ex.what() << "\\n";
     return 1;
@@ -739,17 +959,25 @@ int main(int argc, char** argv) {
 
 const README = (title, author) => `# ${title}
 
-C++ source package for an **illustrated text-based RPG** (console player).
+C++ source package for an **illustrated text-based RPG** — a real **graphical**
+player built with [raylib](https://www.raylib.com/).
 
 ${author ? `by ${author}\n\n` : ""}
-## Windows — first time
+## Windows — first time (no coding needed)
 
-1. Double-click \`SETUP-ADMIN.bat\` (UAC) — installs **Git**, **CMake**, and **VS 2022 Build Tools (C++)** via winget if missing.
-2. Double-click \`PLAY.bat\` — configures, builds (Release), and runs the console game.
+1. Double-click \`SETUP-ADMIN.bat\` (approve the UAC prompt) — installs **Git**,
+   **CMake**, and **VS 2022 Build Tools (C++)** via winget if they're missing.
+2. Double-click \`PLAY.bat\` — configures, builds (Release), and launches the game.
+
+The **first** build downloads and compiles raylib + nlohmann/json from source,
+so it can take a few minutes. After that, launches are fast.
 
 ## Build (manual)
 
-Requires CMake 3.16+ and a C++17 compiler. First configure downloads [nlohmann/json](https://github.com/nlohmann/json).
+Requires CMake 3.16+ and a C++17 compiler. The first configure downloads
+[nlohmann/json](https://github.com/nlohmann/json) and
+[raylib](https://github.com/raysan5/raylib) via CMake FetchContent — no manual
+library install required.
 
 \`\`\`bash
 cmake -S . -B build
@@ -759,22 +987,30 @@ cmake --build build --config Release
 ## Run
 
 \`\`\`bash
-# Interactive
+# Graphical player (opens a window)
 build/Release/illustrated_if.exe
 
-# Headless parity script (JSON fixture with steps + expect)
+# Headless parity script (no window) — JSON fixture with steps + expect
 build/Release/illustrated_if.exe --script path/to/fixture.json --name Parity
 \`\`\`
 
-Commands in-game: numbered choices, **A**bilities, **S**ave / **L**oad slots 1–5, **H**istory, **R**estart, **Q**uit.
+In-game: click a choice or press its **number key**, **Backspace** = back,
+**R** = restart, **Esc** = quit. On the title screen, type your name and press
+**Enter**.
+
+Scene art (\`sceneImage\`) and character sprites (\`characterLeft\` /
+\`characterRight\`) are read from \`project/assets/\`. Missing sprites are hidden;
+a missing or SVG background falls back to a themed panel (raylib can't decode
+SVG). Colors come from \`project/theme/theme.json\`.
 
 Saves write to \`project/saves/slot-N.json\` (same format as HTML/Python).
 
 ## Layout
 
 - \`include/\` — \`conditions.hpp\`, \`runtime.hpp\`, \`saves.hpp\`
-- \`src/\` — runtime + saves + console UI
-- \`project/\` — story JSON + assets
+- \`src/\` — \`runtime.cpp\` + \`saves.cpp\` (logic) and \`main.cpp\` (raylib UI +
+  headless \`--script\` path)
+- \`project/\` — story JSON + assets + theme
 `;
 
 export function exportCpp({ studioRoot, projectDir, outRoot }) {

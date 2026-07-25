@@ -15,7 +15,8 @@ if %errorlevel% neq 0 (
   )
 )
 
-echo Configuring and building...
+echo Configuring and building the graphical game...
+echo (First run downloads and compiles raylib - this can take a few minutes.)
 cmake -S "%~dp0." -B "%~dp0build" -DCMAKE_BUILD_TYPE=Release
 if errorlevel 1 goto fail
 cmake --build "%~dp0build" --config Release
