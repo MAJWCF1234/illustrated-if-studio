@@ -1,5 +1,6 @@
 # SETUP-ADMIN.ps1 — Python package prerequisites
-# Elevates to Administrator, installs Python 3 (with tkinter) via winget.
+# Elevates to Administrator, installs Python 3 via winget, then pre-installs the
+# game libraries (pygame) into a local .venv so PLAY.bat launches instantly.
 
 param([switch]$Launch)
 
@@ -21,7 +22,7 @@ function Find-Python {
     # Skip Windows Store stub
     if ($c.Source -match "WindowsApps|System32\\Python") { continue }
     try {
-      $out = & $c.Source -c "import sys,tkinter; print(sys.version.split()[0])" 2>$null
+      $out = & $c.Source -c "import sys; print(sys.version.split()[0])" 2>$null
       if ($out) { return @{ Exe = $c.Source; Version = $out.Trim(); Launcher = $cmd } }
     } catch {}
   }
@@ -29,8 +30,8 @@ function Find-Python {
   $py = Get-Command py -ErrorAction SilentlyContinue
   if ($py) {
     try {
-      $out = & py -3 -c "import sys,tkinter; print(sys.version.split()[0])" 2>$null
-      if ($out) { return @{ Exe = "py -3"; Version = $out.Trim(); Launcher = "py" } }
+      $out = & py -3 -c "import sys; print(sys.version.split()[0])" 2>$null
+      if ($out) { return @{ Exe = $py.Source; Version = $out.Trim(); Launcher = "py" } }
     } catch {}
   }
   return $null
@@ -48,12 +49,27 @@ if ($found) {
   Write-Host "Installed Python: $($found.Version)"
 }
 
-# Ensure pip works (stdlib UI needs no pip packages)
+# Pre-install game libraries (pygame) into a local .venv so first PLAY is instant.
+$venv = Join-Path $here ".venv"
+$venvPy = Join-Path $venv "Scripts\python.exe"
 try {
-  if ($found.Launcher -eq "py") { & py -3 -m pip --version | Out-Null }
-  else { & $found.Exe -m pip --version | Out-Null }
+  if (-not (Test-Path $venvPy)) {
+    Write-Host "Creating game environment (.venv)…" -ForegroundColor Cyan
+    if ($found.Launcher -eq "py") { & py -3 -m venv $venv } else { & $found.Exe -m venv $venv }
+  }
+  if (Test-Path $venvPy) {
+    Write-Host "Installing game libraries (pygame)…" -ForegroundColor Cyan
+    & $venvPy -m pip install --disable-pip-version-check -r (Join-Path $here "requirements.txt") | Out-Host
+    if ($LASTEXITCODE -eq 0) {
+      Set-Content -Path (Join-Path $venv ".deps-ok") -Value "ok" -Encoding utf8
+      Write-Host "Game libraries ready." -ForegroundColor Green
+    } else {
+      Write-Host "Could not download game libraries now (offline?). PLAY.bat will retry automatically." -ForegroundColor DarkYellow
+    }
+  }
 } catch {
-  Write-Host "pip check skipped (optional for this package)." -ForegroundColor DarkYellow
+  Write-Host "Game library pre-install skipped: $_" -ForegroundColor DarkYellow
+  Write-Host "PLAY.bat will install them automatically on first launch." -ForegroundColor DarkYellow
 }
 
 $marker = Join-Path $here ".prereqs-ok"
@@ -61,7 +77,7 @@ Set-Content -Path $marker -Value "python=$($found.Version)`n$(Get-Date -Format o
 
 Write-Host ""
 Write-Host "Prerequisites ready." -ForegroundColor Green
-Write-Host "Play: double-click PLAY.bat  or  python app.py"
+Write-Host "Play: double-click PLAY.bat"
 
 if ($Launch) {
   Start-Process -FilePath (Join-Path $here "PLAY.bat")

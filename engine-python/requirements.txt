@@ -1,1 +1,4 @@
-# Illustrated IF Studio Python engine (headless stub; pygame UI in Phase 2)
+# Illustrated IF Studio Python engine.
+# if_engine (story logic / saves) is stdlib-only and stays headless.
+# if_gui (graphical player) needs pygame:
+pygame>=2.5

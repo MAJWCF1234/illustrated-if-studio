@@ -71,7 +71,7 @@ Each Windows zip includes:
 | `PLAY.bat` | Launch the game (installs prereqs first if missing) |
 
 - **HTML** setup installs Node.js LTS  
-- **Python** setup installs Python 3.12 (tkinter)  
+- **Python** setup installs Python 3.12 + pygame into a local `.venv` (PLAY.bat auto-installs on first launch too)  
 - **C++** setup installs Git, CMake, VS 2022 Build Tools (C++)
 
 Studio itself: run `SETUP-ADMIN.bat` in this folder if Node is missing.
