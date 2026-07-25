@@ -54,6 +54,7 @@ class NovelRuntime:
         self.seen_scenes: set[str] = set()
         self.last_choice_by_scene: dict[str, str] = {}
         self._last_show_was_seen = False
+        self._skip_chain: set[str] = set()
         self.show(self.project["start"])
 
     def interpolate(self, text: str) -> str:
@@ -86,17 +87,28 @@ class NovelRuntime:
         """Soft rewind one history beat (does not undo abilities/vars)."""
         if not self.can_rollback():
             raise ValueError("Nothing to roll back")
+        self._skip_chain.clear()
         self.state["history"].pop()
         prev = self.state["history"][-1]
         return self.show(prev["id"], prev.get("choice"), record_history=False)
 
     def skip_if_read(self) -> dict | None:
-        """If the current scene was already seen, take preferred/sole choice. Else None."""
+        """If the current scene was already seen, take preferred/sole choice. Else None.
+
+        A chain of consecutive skips refuses to revisit a scene it already
+        skipped through, so cyclic stories (A -> B -> A) stop instead of
+        looping forever. Any manual navigation resets the chain.
+        """
         if not self._last_show_was_seen:
+            self._skip_chain.clear()
             return None
         scene_id = self.state["currentScene"]
+        if scene_id in self._skip_chain:
+            self._skip_chain.clear()
+            return None
         visible = self.visible_choices()
         if not visible:
+            self._skip_chain.clear()
             return None
         preferred = self.last_choice_by_scene.get(scene_id)
         pick = None
@@ -108,7 +120,9 @@ class NovelRuntime:
         if pick is None and len(visible) == 1:
             pick = visible[0]
         if pick is None:
+            self._skip_chain.clear()
             return None
+        self._skip_chain.add(scene_id)
         if pick.get("set"):
             self.state["vars"].update(pick["set"])
         text = pick.get("text")
@@ -119,6 +133,7 @@ class NovelRuntime:
     def choose(self, index: int) -> dict:
         visible = self.visible_choices()
         choice = visible[index]
+        self._skip_chain.clear()
         scene_id = self.state["currentScene"]
         if choice.get("set"):
             self.state["vars"].update(choice["set"])
@@ -144,6 +159,7 @@ class NovelRuntime:
         save = read_slot(self.project_dir, slot)
         if not save:
             raise FileNotFoundError(f"Empty save slot {slot}")
+        self._skip_chain.clear()
         apply_slot(self.state, save)
         # Re-enter scene without appending a duplicate history beat
         scene_id = self.state["currentScene"]
