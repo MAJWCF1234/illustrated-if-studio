@@ -1,4 +1,4 @@
-EMERGENCY / TECHNICAL — most players can ignore this folder
+EMERGENCY / TECHNICAL - most players can ignore this folder
 ===========================================================
 
 To play the game, go back one folder and double-click:
@@ -13,7 +13,7 @@ IF PLAY SAYS SOMETHING IS MISSING
 ---------------------------------
 
 1. Double-click:  SETUP-ADMIN.bat
-2. Windows asks "Do you want to allow this app to make changes?" — click YES.
+2. Windows asks "Do you want to allow this app to make changes?" - click YES.
    (One-time install; needs the internet.)
 3. When it finishes, go back up and double-click Play the Game again.
 

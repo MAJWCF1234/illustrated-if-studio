@@ -52,8 +52,42 @@ function Test-CppTools {
   return [bool]$inst
 }
 
+function Test-StudioAnswering {
+  # Electron may hop to preferredPort+N when something else holds 8787.
+  $preferred = 8787
+  if ($env:PORT -match '^\d+$') { $preferred = [int]$env:PORT }
+  $rootNorm = $Root.TrimEnd('\', '/').Replace('/', '\')
+  for ($delta = 0; $delta -lt 10; $delta++) {
+    $port = $preferred + $delta
+    try {
+      $r = Invoke-WebRequest -Uri "http://127.0.0.1:$port/api/health" -UseBasicParsing -TimeoutSec 1
+      if ($r.StatusCode -ne 200) { continue }
+      $body = $r.Content
+      if ($body -match '"studioRoot"\s*:\s*"([^"]+)"') {
+        $studio = $Matches[1] -replace '\\\\', '\' -replace '/', '\'
+        $studio = $studio.TrimEnd('\', '/')
+        if ([string]::Equals($studio, $rootNorm, [StringComparison]::OrdinalIgnoreCase)) { return $true }
+        continue
+      }
+      if ($body.IndexOf($rootNorm.Replace('\', '\\'), [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
+      if ($body.IndexOf($rootNorm, [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
+    } catch {}
+  }
+  return $false
+}
+
+function Wait-StudioAnswering([int]$seconds = 60) {
+  $deadline = (Get-Date).AddSeconds($seconds)
+  while ((Get-Date) -lt $deadline) {
+    if (Test-StudioAnswering) { return $true }
+    Start-Sleep -Milliseconds 400
+  }
+  return $false
+}
+
 function Offer-ExportTools {
   # Ask at most once (marker under tools/). Skip if everything is already present.
+  # Caller must launch the studio window FIRST - never block first open on this prompt.
   $offered = Join-Path $here ".export-tools-offered"
   if (Test-Path $offered) { return }
 
@@ -110,7 +144,7 @@ No = only install Python (if needed)
     }
   }
 
-  Show-Info("Windows will ask for permission next - click YES, then please wait. This window will continue when setup finishes.")
+  Show-Info("Windows will ask for permission next - click YES, then please wait. The studio stays open while setup finishes.")
   try {
     # runas: UAC. Hidden window; script uses winget.
     $p = Start-Process -FilePath "powershell.exe" -ArgumentList $argList -Verb RunAs -PassThru -Wait -WindowStyle Hidden
@@ -118,24 +152,45 @@ No = only install Python (if needed)
     if ($p.ExitCode -ne 0) {
       Show-Error("Sharing-tools setup didn't finish (code $($p.ExitCode)).`n`nThe studio still works. You can retry from tools\emergency\SETUP-EXPORT-TOOLS.bat, or let each game zip install what it needs.")
     } else {
-      Show-Info("Sharing tools are ready (or were already installed). Opening the studio...")
+      Show-Info("Sharing tools are ready (or were already installed).")
     }
   } catch {
     # User clicked No on UAC, or elevation failed
-    Show-Info("Setup was cancelled. The studio still opens - HTML playtest works; Python/C++ zips can install tools when you open them.")
+    Show-Info("Setup was cancelled. The studio still works - HTML playtest works; Python/C++ zips can install tools when you open them.")
   }
 }
 
 $emergencySetup = Join-Path $here "emergency\SETUP-ADMIN.bat"
 $electronExe = Join-Path $Root "node_modules\electron\dist\electron.exe"
+$electronCli = Join-Path $Root "node_modules\electron\cli.js"
+
+function Start-ElectronStudio {
+  # Start detached so optional sharing-tools prompts never block the window from opening.
+  # ArgumentList keeps $Root as one argv even when the path contains spaces.
+  if (Test-Path $electronExe) {
+    return Start-Process -FilePath $electronExe -ArgumentList @($Root) -PassThru -WorkingDirectory $Root
+  }
+  return Start-Process -FilePath "node" -ArgumentList @($electronCli, $Root) -PassThru -WorkingDirectory $Root
+}
+
+function Launch-ThenOfferExportTools {
+  $proc = Start-ElectronStudio
+  # Match Illustrated IF Studio.exe: wait until THIS folder's backend answers, then ask.
+  [void](Wait-StudioAnswering 60)
+  Offer-ExportTools
+  if ($null -eq $proc) { exit 1 }
+  if (-not $proc.HasExited) {
+    Wait-Process -Id $proc.Id
+  }
+  exit $proc.ExitCode
+}
 
 # --- 0. Bundled Electron runs the whole studio on its own -------------------
 # Electron ships its own Node, so when node_modules came in the zip there is
-# nothing to install for the studio window. Still offer optional sharing tools once.
+# nothing to install for the studio window. Offer optional sharing tools only
+# AFTER the studio is answering - never before the first window.
 if (Test-Path $electronExe) {
-  Offer-ExportTools
-  & $electronExe $Root
-  exit $LASTEXITCODE
+  Launch-ThenOfferExportTools
 }
 
 # --- 1. Make sure Node.js is available -------------------------------------
@@ -180,7 +235,6 @@ finish (click YES on the Windows prompt). Then double-click
 }
 
 # --- 2. Make sure Electron (the app window) is installed --------------------
-$electronCli = Join-Path $Root "node_modules\electron\cli.js"
 if (-not (Test-Path $electronCli)) {
   Show-Info(@"
 Illustrated IF Studio is getting ready for the first time.
@@ -200,14 +254,10 @@ the studio window will open on its own when it's ready.
   }
 }
 
-# --- 2b. Optional: tools for sharing Python / C++ games --------------------
-Offer-ExportTools
-
-# --- 3. Launch the studio window (Electron) --------------------------------
+# --- 3. Launch studio, then optional sharing-tools prompt (never before) ----
 try {
-  if (Test-Path $electronExe) { & $electronExe $Root } else { & node $electronCli $Root }
+  Launch-ThenOfferExportTools
 } catch {
   Show-Error("The studio ran into a problem while starting.`n`nTry once more. If it keeps happening, open 'tools\emergency\RUN-EDITOR.bat' to see the details.")
   exit 1
 }
-exit $LASTEXITCODE

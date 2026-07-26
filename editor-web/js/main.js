@@ -12,6 +12,8 @@ const state = {
   startId: "start",
   selected: null,
   dirty: false,
+  /** Fingerprint of last load/save — undo/redo clears dirty when it matches again. */
+  savedFingerprint: "",
   assets: { sceneImages: [], characters: [] },
   abilities: [],
   inspTab: "story",
@@ -21,6 +23,7 @@ const state = {
 };
 
 const history = new HistoryStack();
+let textHistoryTimer = null;
 
 const els = {
   title: document.getElementById("project-title"),
@@ -85,6 +88,20 @@ function syncHistoryButtons() {
   els.btnRedo.disabled = !history.canRedo();
 }
 
+function contentFingerprint() {
+  return JSON.stringify({
+    scenes: state.scenes,
+    startId: state.startId,
+    theme: state.theme,
+  });
+}
+
+function syncDirtyFromFingerprint() {
+  const dirty = contentFingerprint() !== state.savedFingerprint;
+  state.dirty = dirty;
+  document.title = dirty ? "• Illustrated IF Studio" : "Illustrated IF Studio";
+}
+
 function markDirty(label = "edit") {
   state.dirty = true;
   document.title = "• Illustrated IF Studio";
@@ -92,6 +109,7 @@ function markDirty(label = "edit") {
 }
 
 function clearDirty() {
+  state.savedFingerprint = contentFingerprint();
   state.dirty = false;
   document.title = "Illustrated IF Studio";
 }
@@ -103,9 +121,18 @@ function applySnapshot(snap) {
   renderList();
   fillInspector();
   graph.draw(state.scenes, state.startId);
-  state.dirty = true;
-  document.title = "• Illustrated IF Studio";
+  syncDirtyFromFingerprint();
   syncHistoryButtons();
+}
+
+/** Commit debounced text edits into the undo stack before undo/redo. */
+function flushPendingTextHistory() {
+  if (textHistoryTimer) {
+    clearTimeout(textHistoryTimer);
+    textHistoryTimer = null;
+    flushInspectorToState();
+    pushHistory("text");
+  }
 }
 
 function connectScenes(fromId, toId) {
@@ -502,24 +529,34 @@ function setInspTab(name) {
 
 let assetFolder = "scene_images";
 
-function assignArtSlot(slot, filename) {
-  if (!state.selected || !state.scenes[state.selected]) return;
-  const scene = state.scenes[state.selected];
+function assignArtSlot(slot, filename, sceneId = state.selected) {
+  const scene = sceneId && state.scenes[sceneId];
+  if (!scene) return;
   if (slot === "bg") {
-    els.fBg.value = filename || "";
     scene.sceneImage = filename || null;
+    if (state.selected === sceneId) els.fBg.value = filename || "";
   } else if (slot === "left") {
-    els.fLeft.value = filename || "";
     scene.characterLeft = filename || null;
+    if (state.selected === sceneId) els.fLeft.value = filename || "";
   } else if (slot === "right") {
-    els.fRight.value = filename || "";
     scene.characterRight = filename || null;
+    if (state.selected === sceneId) els.fRight.value = filename || "";
   }
   markDirty("art-assign");
-  updateArtPreview(scene);
-  updateStats(scene);
-  renderAssetBrowser();
-  toast(filename ? `Assigned ${filename}` : "Cleared slot");
+  if (state.selected === sceneId) {
+    updateArtPreview(scene);
+    updateStats(scene);
+    renderAssetBrowser();
+  } else {
+    renderList();
+  }
+  toast(
+    filename
+      ? state.selected === sceneId
+        ? `Assigned ${filename}`
+        : `Assigned ${filename} → ${sceneId}`
+      : "Cleared slot"
+  );
 }
 
 function renderAssetBrowser() {
@@ -646,12 +683,14 @@ function bindAssetBrowser() {
     const file = fileInput.files?.[0];
     fileInput.value = "";
     if (!file) return;
+    const targetSceneId = state.selected;
+    const folder = assetFolder;
     try {
       toast(`Uploading ${file.name}…`);
-      const data = await uploadAssetFile(file, assetFolder);
+      const data = await uploadAssetFile(file, folder);
       renderAssetBrowser();
-      if (assetFolder === "scene_images") assignArtSlot("bg", data.filename);
-      else assignArtSlot("left", data.filename);
+      if (folder === "scene_images") assignArtSlot("bg", data.filename, targetSceneId);
+      else assignArtSlot("left", data.filename, targetSceneId);
     } catch (err) {
       showLog("Upload failed", String(err.message || err));
     }
@@ -688,6 +727,7 @@ function bindAssetBrowser() {
       const file = e.dataTransfer.files?.[0];
       if (!file) return;
       const folder = slot === "bg" ? "scene_images" : "characters";
+      const targetSceneId = state.selected;
       try {
         toast(`Uploading ${file.name}…`);
         const data = await uploadAssetFile(file, folder);
@@ -696,7 +736,7 @@ function bindAssetBrowser() {
           b.classList.toggle("active", b.dataset.assetFolder === folder)
         );
         renderAssetBrowser();
-        assignArtSlot(slot, data.filename);
+        assignArtSlot(slot, data.filename, targetSceneId);
       } catch (err) {
         showLog("Upload failed", String(err.message || err));
       }
@@ -705,7 +745,6 @@ function bindAssetBrowser() {
 }
 
 function bindInspectorFields() {
-  let textTimer = null;
   const onFieldChange = () => {
     flushInspectorToState();
     markDirty("inspector");
@@ -741,8 +780,11 @@ function bindInspectorFields() {
     state.dirty = true;
     document.title = "• Illustrated IF Studio";
     updateStats(state.scenes[state.selected]);
-    clearTimeout(textTimer);
-    textTimer = setTimeout(() => pushHistory("text"), 700);
+    clearTimeout(textHistoryTimer);
+    textHistoryTimer = setTimeout(() => {
+      textHistoryTimer = null;
+      pushHistory("text");
+    }, 700);
   });
   els.fText.addEventListener("change", onFieldChange);
 
@@ -816,8 +858,7 @@ function ensureDesignMounted() {
       state.theme = mergeTheme(t);
     },
     onDirty: () => {
-      state.dirty = true;
-      document.title = "• Illustrated IF Studio";
+      syncDirtyFromFingerprint();
     },
   });
 }
@@ -1137,6 +1178,7 @@ document.getElementById("btn-auto").addEventListener("click", () => {
   toast("Auto-layout applied");
 });
 document.getElementById("btn-undo").addEventListener("click", () => {
+  flushPendingTextHistory();
   flushInspectorToState();
   const snap = history.undo();
   if (snap) {
@@ -1145,6 +1187,7 @@ document.getElementById("btn-undo").addEventListener("click", () => {
   }
 });
 document.getElementById("btn-redo").addEventListener("click", () => {
+  flushPendingTextHistory();
   const snap = history.redo();
   if (snap) {
     applySnapshot(snap);

@@ -13,8 +13,8 @@ const HELP = `Illustrated IF Studio CLI — high-level commands
   dest [path]                  Get or set export destination folder (HTML/Python/C++/raw)
   validate                     Validate the active project
   save                         Save unsaved scene edits (if any)
-  scenes                       Scene count + start id
-  scene <id>                   Peek a scene (text / choices)
+  scenes                       Scene count + start id (saves dirty edits first)
+  scene <id>                   Peek a scene (text / choices; saves dirty edits first)
   export <html|python|cpp|raw|all> [--dest path]
                                Build packages (raw uses dest)
   import folder <path> [--id name] [--overwrite]
@@ -184,6 +184,7 @@ export async function runCliCommand(line, ctx) {
     }
 
     case "scenes": {
+      if (ctx.saveFirst) await ctx.saveFirst();
       const { ok, data } = await api("/api/project");
       if (!ok) return { text: data?.error || "failed", ok: false };
       const ids = Object.keys(data.scenes?.scenes || data.scenes || {});
@@ -197,6 +198,7 @@ export async function runCliCommand(line, ctx) {
     case "scene": {
       const id = args[0];
       if (!id) return { text: "usage: scene <id>", ok: false };
+      if (ctx.saveFirst) await ctx.saveFirst();
       const { ok, data } = await api("/api/project");
       if (!ok) return { text: data?.error || "failed", ok: false };
       const scene = (data.scenes?.scenes || data.scenes || {})[id];

@@ -37,10 +37,10 @@ How to play (Windows)
 2. Your browser opens the game.
 
 The first time, Windows may ask for permission to install a small helper
-(Node.js) if it isn't already on this PC. Click YES — it needs the internet
+(Node.js) if it isn't already on this PC. Click YES - it needs the internet
 once. After that, play is instant.
 
-Do not open index.html by itself (file://) — browsers block the game data.
+Do not open index.html by itself (file://) - browsers block the game data.
 
 If something goes wrong
 -----------------------

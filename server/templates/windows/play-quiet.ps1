@@ -94,6 +94,18 @@ function Find-Python {
 
 function Have-Cmake { return [bool](Get-Command cmake -ErrorAction SilentlyContinue) }
 
+function Have-Cxx {
+  foreach ($cmd in @("cl", "g++", "clang++")) {
+    if (Get-Command $cmd -ErrorAction SilentlyContinue) { return $true }
+  }
+  $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+  if (Test-Path $vswhere) {
+    $inst = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>$null
+    if ($inst) { return $true }
+  }
+  return $false
+}
+
 function Start-PlayBat([switch]$Wait) {
   $play = Join-Path $pkgRoot "PLAY.bat"
   if (-not (Test-Path $play)) {
@@ -138,7 +150,8 @@ switch ($target) {
     Start-PlayBat -Wait
   }
   "cpp" {
-    if (-not (Have-Cmake)) {
+    $needSetup = -not (Have-Cmake) -or -not (Have-Cxx)
+    if ($needSetup) {
       $go = Ask-OkCancel(@"
 This C++ game needs build tools the first time (CMake and a C++ compiler).
 
@@ -162,8 +175,8 @@ Click OK to install and play, or Cancel to stop.
         exit 1
       }
       Refresh-EnvPath
-      if (-not (Have-Cmake)) {
-        Show-Error("Build tools still aren't ready.`n`nOpen _emergency, run SETUP-ADMIN.bat, wait until it finishes, then try Play again.")
+      if (-not (Have-Cmake) -or -not (Have-Cxx)) {
+        Show-Error("Build tools still aren't ready.`n`nOpen _emergency, run SETUP-ADMIN.bat, wait until it finishes (it can take a long time), then try Play again.")
         exit 1
       }
     } else {
