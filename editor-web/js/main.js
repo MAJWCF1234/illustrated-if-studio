@@ -321,8 +321,13 @@ function renderChoicesEditor(scene) {
     const card = document.createElement("div");
     card.className = "action-card";
     const broken = !c.next || !state.scenes[c.next];
+    const placeholder = broken
+      ? `<option value="${escapeAttr(c.next || "")}" selected>${
+          c.next ? `${escapeAttr(c.next)} (missing)` : "(no scene chosen)"
+        }</option>`
+      : `<option value="" disabled ${!c.next ? "selected" : ""}>(pick a scene)</option>`;
     const options = ids
-      .map((id) => `<option value="${escapeAttr(id)}" ${c.next === id ? "selected" : ""}>${escapeAttr(id)}</option>`)
+      .map((id) => `<option value="${escapeAttr(id)}" ${!broken && c.next === id ? "selected" : ""}>${escapeAttr(id)}</option>`)
       .join("");
     card.innerHTML = `
       <div class="action-card-top">
@@ -337,7 +342,7 @@ function renderChoicesEditor(scene) {
         <input data-k="text" type="text" value="${escapeAttr(c.text || "")}" placeholder="What the player clicks" />
       </label>
       <label>Goes to
-        <select data-k="next">${options}</select>
+        <select data-k="next">${placeholder}${options}</select>
       </label>
       <label>Needs ability
         <input data-k="when" type="text" list="ability-ids" value="${escapeAttr(c.when?.hasAbility || "")}" placeholder="optional" />
@@ -402,6 +407,57 @@ function renderChoicesEditor(scene) {
 
 function escapeAttr(s) {
   return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+}
+
+const SCENE_ID_RE = /^[\p{L}\p{N}_-]+$/u;
+
+function renameSelectedScene(rawId) {
+  const oldId = state.selected;
+  if (!oldId || !state.scenes[oldId]) return false;
+  const newId = String(rawId || "").trim();
+  if (!newId) {
+    toast("Scene name can't be empty");
+    els.fId.value = oldId;
+    return false;
+  }
+  if (newId === oldId) return true;
+  if (newId.length > 64) {
+    toast("Scene name is too long (max 64 characters)");
+    els.fId.value = oldId;
+    return false;
+  }
+  if (/\s/.test(newId) || /[<>&"'`/\\]/.test(newId) || !SCENE_ID_RE.test(newId)) {
+    toast("Use letters, numbers, hyphens, or underscores — no spaces or symbols");
+    els.fId.value = oldId;
+    return false;
+  }
+  if (state.scenes[newId]) {
+    toast(`A scene named "${newId}" already exists`);
+    els.fId.value = oldId;
+    return false;
+  }
+
+  const scene = state.scenes[oldId];
+  delete state.scenes[oldId];
+  scene.id = newId;
+  state.scenes[newId] = scene;
+  for (const sc of Object.values(state.scenes)) {
+    for (const c of sc.choices || []) {
+      if (c.next === oldId) c.next = newId;
+    }
+  }
+  if (state.startId === oldId) state.startId = newId;
+  if (graph.positions[oldId]) {
+    graph.positions[newId] = graph.positions[oldId];
+    delete graph.positions[oldId];
+  }
+  state.selected = newId;
+  markDirty("rename");
+  renderList();
+  fillInspector();
+  graph.draw(state.scenes, state.startId);
+  toast(`Renamed ${oldId} → ${newId}`);
+  return true;
 }
 
 function flushInspectorToState() {
@@ -649,6 +705,15 @@ function bindInspectorFields() {
   [els.fSpeaker, els.fBg, els.fLeft, els.fRight, els.fUnlock].forEach((el) => {
     el.addEventListener("change", onFieldChange);
   });
+  els.fId.addEventListener("change", () => {
+    renameSelectedScene(els.fId.value);
+  });
+  els.fId.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      els.fId.blur();
+    }
+  });
   [els.fBg, els.fLeft, els.fRight].forEach((el) => {
     el.addEventListener("input", () => {
       flushInspectorToState();
@@ -686,33 +751,40 @@ function bindInspectorFields() {
   });
 }
 
+let saveInFlight = null;
 async function saveProject() {
-  flushInspectorToState();
-  const scenesRes = await fetch("/api/scenes", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ start: state.startId, scenes: state.scenes }),
-  });
-  const scenesData = await scenesRes.json();
-  if (!scenesRes.ok) {
-    showLog("Save failed", scenesData.error || JSON.stringify(scenesData));
-    return false;
-  }
+  if (saveInFlight) return saveInFlight;
+  saveInFlight = (async () => {
+    flushInspectorToState();
+    const scenesRes = await fetch("/api/scenes", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ start: state.startId, scenes: state.scenes }),
+    });
+    const scenesData = await scenesRes.json();
+    if (!scenesRes.ok) {
+      showLog("Save failed", scenesData.error || JSON.stringify(scenesData));
+      return false;
+    }
 
-  const themeRes = await fetch("/api/theme", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ theme: mergeTheme(state.theme) }),
-  });
-  const themeData = await themeRes.json();
-  if (!themeRes.ok) {
-    showLog("Theme save failed", themeData.error || JSON.stringify(themeData));
-    return false;
-  }
+    const themeRes = await fetch("/api/theme", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ theme: mergeTheme(state.theme) }),
+    });
+    const themeData = await themeRes.json();
+    if (!themeRes.ok) {
+      showLog("Theme save failed", themeData.error || JSON.stringify(themeData));
+      return false;
+    }
 
-  clearDirty();
-  toast(`Saved ${scenesData.count} scenes + theme`);
-  return true;
+    clearDirty();
+    toast(`Saved ${scenesData.count} scenes + theme`);
+    return true;
+  })().finally(() => {
+    saveInFlight = null;
+  });
+  return saveInFlight;
 }
 
 let designApi = null;
@@ -927,7 +999,13 @@ document.getElementById("btn-delete").addEventListener("click", () => {
     toast("Cannot delete the start scene");
     return;
   }
-  if (!confirm(`Delete scene "${id}"?`)) return;
+  const inbound = collectInbound(state.scenes);
+  const n = inbound[id] || 0;
+  const warn =
+    n > 0
+      ? `\n\n${n} other action${n === 1 ? "" : "s"} point here — those links will break until you fix them.`
+      : "";
+  if (!confirm(`Delete scene "${id}"?${warn}`)) return;
   delete state.scenes[id];
   delete graph.positions[id];
   for (const sc of Object.values(state.scenes)) {
@@ -950,6 +1028,10 @@ document.getElementById("mode-projects").addEventListener("click", () => setWork
 document.getElementById("mode-cli").addEventListener("click", () => setWorkspaceMode("cli"));
 document.getElementById("btn-validate").addEventListener("click", async () => {
   flushInspectorToState();
+  if (state.dirty) {
+    const saved = await saveProject();
+    if (!saved) return;
+  }
   const res = await fetch("/api/validate", { method: "POST" });
   const data = await res.json();
   showLog(data.ok ? "Validate OK" : "Validate issues", data.output || "");
@@ -974,45 +1056,55 @@ document.addEventListener("click", (e) => {
   if (!exportMenu.contains(e.target)) closeExportMenu();
 });
 
+let exportInFlight = null;
 async function runExport(target) {
-  closeExportMenu();
-  if (!(await saveProject())) return;
-  toast(`Exporting ${target}…`);
-  const dest = document.getElementById("proj-export-dest")?.value?.trim() || "";
-  const endpoint = target === "all" ? "/api/export-all" : "/api/export";
-  const body =
-    target === "all"
-      ? JSON.stringify(dest ? { destination: dest, saveDestination: true } : {})
-      : JSON.stringify({
-          target,
-          ...(dest ? { destination: dest, saveDestination: true } : {}),
-        });
-  const res = await fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body,
+  if (exportInFlight) {
+    toast("Export already in progress…");
+    return exportInFlight;
+  }
+  exportInFlight = (async () => {
+    closeExportMenu();
+    if (!(await saveProject())) return;
+    toast(`Exporting ${target}…`);
+    const dest = document.getElementById("proj-export-dest")?.value?.trim() || "";
+    const endpoint = target === "all" ? "/api/export-all" : "/api/export";
+    const body =
+      target === "all"
+        ? JSON.stringify(dest ? { destination: dest, saveDestination: true } : {})
+        : JSON.stringify({
+            target,
+            ...(dest ? { destination: dest, saveDestination: true } : {}),
+          });
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    });
+    const data = await res.json();
+    let extra = "";
+    if (data.downloadUrl) {
+      extra = `\n\nDownload: ${location.origin}${data.downloadUrl}`;
+    } else if (data.folder) {
+      extra = `\n\nFolder: ${data.folder}`;
+    } else if (data.results) {
+      const links = data.results
+        .filter((r) => r.downloadUrl || r.folder)
+        .map((r) => `${r.target}: ${r.downloadUrl ? location.origin + r.downloadUrl : r.folder}`);
+      if (links.length) extra = `\n\nOutputs:\n${links.join("\n")}`;
+    }
+    showLog(data.ok ? "Export OK" : "Export failed", (data.output || data.error || "") + extra);
+    if (data.ok && data.downloadUrl) {
+      const a = document.createElement("a");
+      a.href = data.downloadUrl;
+      a.download = "";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+  })().finally(() => {
+    exportInFlight = null;
   });
-  const data = await res.json();
-  let extra = "";
-  if (data.downloadUrl) {
-    extra = `\n\nDownload: ${location.origin}${data.downloadUrl}`;
-  } else if (data.folder) {
-    extra = `\n\nFolder: ${data.folder}`;
-  } else if (data.results) {
-    const links = data.results
-      .filter((r) => r.downloadUrl || r.folder)
-      .map((r) => `${r.target}: ${r.downloadUrl ? location.origin + r.downloadUrl : r.folder}`);
-    if (links.length) extra = `\n\nOutputs:\n${links.join("\n")}`;
-  }
-  showLog(data.ok ? "Export OK" : "Export failed", (data.output || data.error || "") + extra);
-  if (data.ok && data.downloadUrl) {
-    const a = document.createElement("a");
-    a.href = data.downloadUrl;
-    a.download = "";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  }
+  return exportInFlight;
 }
 
 exportDropdown.querySelectorAll("[data-export]").forEach((btn) => {
