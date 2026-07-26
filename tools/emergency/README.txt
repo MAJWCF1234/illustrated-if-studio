@@ -11,6 +11,10 @@ message told you to.
 TRY THESE IN ORDER
 ------------------
 
+0. If Windows showed a blue "Windows protected your PC" box when you double-
+   clicked the studio, that is NOT a broken install. Go back, click
+   "More info", then "Run anyway". You can ignore the steps below.
+
 1. Double-click:  Start the studio (backup)
    Same job as the normal launcher, done a different way. If antivirus ate the
    normal one, this usually still works.

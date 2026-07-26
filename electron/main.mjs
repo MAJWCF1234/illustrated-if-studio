@@ -316,6 +316,77 @@ async function createWindow(health) {
     mainWindow = null;
   });
 
+  // User clicking the window X fires BrowserWindow 'close' *before* DOM
+  // beforeunload. Playwright's page.close() can skip beforeunload entirely, so
+  // this main-process gate is what actually protects a mid-export quit.
+  let allowClose = false;
+  mainWindow.on("close", (e) => {
+    if (allowClose) return;
+    if (headless && process.env.IF_ELECTRON_FORCE_CLOSE === "1") return;
+    e.preventDefault();
+    const decide = async () => {
+      let dirty = false;
+      let exporting = false;
+      try {
+        const state = await mainWindow.webContents.executeJavaScript(
+          `({ dirty: Boolean(window.__IF_DIRTY__) || document.title.startsWith("\\u2022"), exporting: Boolean(window.__IF_EXPORT_IN_FLIGHT__) })`
+        );
+        dirty = Boolean(state?.dirty);
+        exporting = Boolean(state?.exporting);
+      } catch {
+        /* page may be mid-teardown */
+      }
+      if (!dirty && !exporting) {
+        allowClose = true;
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close();
+        return;
+      }
+      if (headless) {
+        // Keep the window open so smokes can assert the guard; app.quit()/destroy still works.
+        log("close blocked (headless): dirty=", dirty, "exporting=", exporting);
+        return;
+      }
+      const choice = dialog.showMessageBoxSync(mainWindow, {
+        type: "warning",
+        title: "Leave Illustrated IF Studio?",
+        message: exporting ? "An export is still running." : "You have unsaved changes.",
+        detail: exporting
+          ? "Closing now stops the studio and can interrupt the export.\nStay open until Export finishes, or close anyway if you are sure."
+          : "Closing now discards unsaved edits.\nStay open to Save first, or close anyway.",
+        buttons: ["Stay open", "Close anyway"],
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true,
+      });
+      if (choice === 1) {
+        allowClose = true;
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close();
+      }
+    };
+    decide().catch((err) => log("close guard error", String(err?.message || err)));
+  });
+
+  // Also honor DOM beforeunload (reload / in-page navigation) the Electron way.
+  mainWindow.webContents.on("will-prevent-unload", (event) => {
+    if (allowClose) {
+      // Intentional close after the user confirmed (or clean close).
+      event.preventDefault();
+      return;
+    }
+    if (headless) return;
+    const choice = dialog.showMessageBoxSync(mainWindow, {
+      type: "warning",
+      title: "Leave Illustrated IF Studio?",
+      message: "Leave this page anyway?",
+      detail: "An export may still be running, or you may have unsaved edits.",
+      buttons: ["Stay", "Leave"],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+    });
+    if (choice === 1) event.preventDefault();
+  });
+
   const url = editorUrl();
   log("loading", url);
   await mainWindow.loadURL(url);

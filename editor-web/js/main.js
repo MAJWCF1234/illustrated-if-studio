@@ -96,15 +96,29 @@ function contentFingerprint() {
   });
 }
 
+/** Set by runExport; declared early so syncShellBusyFlags can read it. */
+let exportInFlight = null;
+
+function syncShellBusyFlags() {
+  try {
+    window.__IF_DIRTY__ = Boolean(state.dirty);
+    window.__IF_EXPORT_IN_FLIGHT__ = Boolean(exportInFlight);
+  } catch {
+    /* ignore */
+  }
+}
+
 function syncDirtyFromFingerprint() {
   const dirty = contentFingerprint() !== state.savedFingerprint;
   state.dirty = dirty;
   document.title = dirty ? "• Illustrated IF Studio" : "Illustrated IF Studio";
+  syncShellBusyFlags();
 }
 
 function markDirty(label = "edit") {
   state.dirty = true;
   document.title = "• Illustrated IF Studio";
+  syncShellBusyFlags();
   pushHistory(label);
 }
 
@@ -112,6 +126,7 @@ function clearDirty() {
   state.savedFingerprint = contentFingerprint();
   state.dirty = false;
   document.title = "Illustrated IF Studio";
+  syncShellBusyFlags();
 }
 
 function applySnapshot(snap) {
@@ -168,26 +183,39 @@ async function loadAssets() {
   } catch {
     /* optional */
   }
+  // Catalog ids from abilities.json plus whatever scenes already use — so a
+  // planned ability shows in the "Needs ability" datalist before any scene
+  // unlocks it, without replacing freeform ids typed into scenes.
+  const ids = new Set();
   try {
-    const project = state.project;
-    if (project?.story?.abilities) {
-      const ab = await fetch(`${state.projectUrl}${project.story.abilities}`);
+    const rel = state.project?.story?.abilities;
+    if (rel) {
+      const ab = await fetch(`${state.projectUrl}${rel}`);
       if (ab.ok) {
-        /* catalog optional — scene-derived ids cover gates */
+        const doc = await ab.json();
+        const catalog = doc?.abilities;
+        if (catalog && typeof catalog === "object" && !Array.isArray(catalog)) {
+          for (const key of Object.keys(catalog)) {
+            if (key) ids.add(key);
+          }
+        } else if (Array.isArray(catalog)) {
+          for (const entry of catalog) {
+            const id = typeof entry === "string" ? entry : entry?.id;
+            if (id) ids.add(String(id));
+          }
+        }
       }
     }
   } catch {
-    /* ignore */
+    /* catalog optional */
   }
-  // Pull ability ids from scenes + abilities.json via project fetch already done
-  const fromScenes = new Set();
   for (const sc of Object.values(state.scenes)) {
-    if (sc.unlockAbility) fromScenes.add(sc.unlockAbility);
+    if (sc.unlockAbility) ids.add(String(sc.unlockAbility).trim());
     for (const c of sc.choices || []) {
-      if (c.when?.hasAbility) fromScenes.add(c.when.hasAbility);
+      if (c.when?.hasAbility) ids.add(String(c.when.hasAbility).trim());
     }
   }
-  state.abilities = [...fromScenes].sort();
+  state.abilities = [...ids].filter(Boolean).sort();
   refreshDatalists();
 }
 
@@ -779,6 +807,7 @@ function bindInspectorFields() {
     flushInspectorToState();
     state.dirty = true;
     document.title = "• Illustrated IF Studio";
+    syncShellBusyFlags();
     updateStats(state.scenes[state.selected]);
     clearTimeout(textHistoryTimer);
     textHistoryTimer = setTimeout(() => {
@@ -1113,59 +1142,64 @@ document.addEventListener("click", (e) => {
   if (!exportMenu.contains(e.target)) closeExportMenu();
 });
 
-let exportInFlight = null;
+function setExportInFlight(promise) {
+  exportInFlight = promise;
+  syncShellBusyFlags();
+}
 async function runExport(target) {
   if (exportInFlight) {
     toast("Export already in progress…");
     return exportInFlight;
   }
   const pinnedProjectId = state.projectId;
-  exportInFlight = (async () => {
-    closeExportMenu();
-    if (!(await saveProject())) return;
-    toast(`Exporting ${target}…`);
-    const dest = document.getElementById("proj-export-dest")?.value?.trim() || "";
-    const endpoint = target === "all" ? "/api/export-all" : "/api/export";
-    const body =
-      target === "all"
-        ? JSON.stringify({
-            projectId: pinnedProjectId,
-            ...(dest ? { destination: dest, saveDestination: true } : {}),
-          })
-        : JSON.stringify({
-            target,
-            projectId: pinnedProjectId,
-            ...(dest ? { destination: dest, saveDestination: true } : {}),
-          });
-    const res = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body,
-    });
-    const data = await res.json();
-    let extra = "";
-    if (data.downloadUrl) {
-      extra = `\n\nDownload: ${location.origin}${data.downloadUrl}`;
-    } else if (data.folder) {
-      extra = `\n\nFolder: ${data.folder}`;
-    } else if (data.results) {
-      const links = data.results
-        .filter((r) => r.downloadUrl || r.folder)
-        .map((r) => `${r.target}: ${r.downloadUrl ? location.origin + r.downloadUrl : r.folder}`);
-      if (links.length) extra = `\n\nOutputs:\n${links.join("\n")}`;
-    }
-    showLog(data.ok ? "Export OK" : "Export failed", (data.output || data.error || "") + extra);
-    if (data.ok && data.downloadUrl) {
-      const a = document.createElement("a");
-      a.href = data.downloadUrl;
-      a.download = "";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    }
-  })().finally(() => {
-    exportInFlight = null;
-  });
+  setExportInFlight(
+    (async () => {
+      closeExportMenu();
+      if (!(await saveProject())) return;
+      toast(`Exporting ${target}…`);
+      const dest = document.getElementById("proj-export-dest")?.value?.trim() || "";
+      const endpoint = target === "all" ? "/api/export-all" : "/api/export";
+      const body =
+        target === "all"
+          ? JSON.stringify({
+              projectId: pinnedProjectId,
+              ...(dest ? { destination: dest, saveDestination: true } : {}),
+            })
+          : JSON.stringify({
+              target,
+              projectId: pinnedProjectId,
+              ...(dest ? { destination: dest, saveDestination: true } : {}),
+            });
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      });
+      const data = await res.json();
+      let extra = "";
+      if (data.downloadUrl) {
+        extra = `\n\nDownload: ${location.origin}${data.downloadUrl}`;
+      } else if (data.folder) {
+        extra = `\n\nFolder: ${data.folder}`;
+      } else if (data.results) {
+        const links = data.results
+          .filter((r) => r.downloadUrl || r.folder)
+          .map((r) => `${r.target}: ${r.downloadUrl ? location.origin + r.downloadUrl : r.folder}`);
+        if (links.length) extra = `\n\nOutputs:\n${links.join("\n")}`;
+      }
+      showLog(data.ok ? "Export OK" : "Export failed", (data.output || data.error || "") + extra);
+      if (data.ok && data.downloadUrl) {
+        const a = document.createElement("a");
+        a.href = data.downloadUrl;
+        a.download = "";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+    })().finally(() => {
+      setExportInFlight(null);
+    })
+  );
   return exportInFlight;
 }
 
@@ -1434,7 +1468,9 @@ window.addEventListener("keydown", (e) => {
 });
 
 window.addEventListener("beforeunload", (e) => {
-  if (state.dirty) {
+  // Dirty edits OR an in-flight export — Electron main shows a real dialog via
+  // will-prevent-unload; browsers use their generic leave-site prompt.
+  if (state.dirty || exportInFlight) {
     e.preventDefault();
     e.returnValue = "";
   }

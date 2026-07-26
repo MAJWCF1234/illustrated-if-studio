@@ -2,7 +2,10 @@
 export function evalWhen(when, state) {
   if (!when || typeof when !== "object") return true;
   if (when.hasAbility) {
-    return Array.isArray(state.abilities) && state.abilities.includes(when.hasAbility);
+    // Match unlockAbility trimming so padded ids in hand-edited JSON still gate correctly.
+    const want = String(when.hasAbility).trim();
+    if (!want) return true;
+    return Array.isArray(state.abilities) && state.abilities.includes(want);
   }
   if (when.var != null) {
     const left = state.vars?.[when.var];

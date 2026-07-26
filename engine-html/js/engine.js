@@ -735,10 +735,12 @@ export class NovelEngine {
   }
 
   unlockAbility(name) {
-    if (!name || this.state.abilities.includes(name)) return;
-    this.state.abilities.push(name);
-    this.persist( "abilities", this.state.abilities);
-    this.toast(`Ability unlocked: ${name}`);
+    // Trim so hand-edited "   " / padded ids cannot pollute gating or toast UX.
+    const id = typeof name === "string" ? name.trim() : name ? String(name).trim() : "";
+    if (!id || this.state.abilities.includes(id)) return;
+    this.state.abilities.push(id);
+    this.persist("abilities", this.state.abilities);
+    this.toast(`Ability unlocked: ${id}`);
     if (!this.root.abilityMenu.hidden) this.renderAbilityList();
   }
 
@@ -830,7 +832,12 @@ export class NovelEngine {
 
     const hookName = scene.hooks?.onEnter;
     if (hookName && typeof this.hooks[hookName] === "function") {
-      this.hooks[hookName]();
+      // A throwing onEnter must not abort choice rendering — story stays playable.
+      try {
+        this.hooks[hookName]();
+      } catch (err) {
+        console.warn(`onEnter hook "${hookName}" failed:`, err?.message || err);
+      }
     }
 
     const showHotkeys = document.body.dataset.showHotkeys !== "0";
