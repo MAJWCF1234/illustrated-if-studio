@@ -144,7 +144,7 @@ try {
     const choices = document.querySelectorAll("#choices .choice").length;
     return { body: body.slice(0, 40), choices };
   });
-  if (!/workshop|tiny demo/i.test(playable.body)) bug(`NVL story text missing: ${playable.body}`);
+  if (!/sample project|tiny demo/i.test(playable.body)) bug(`NVL story text missing: ${playable.body}`);
   if (playable.choices < 1) bug("NVL choices missing");
   console.log("NVL playable OK:", playable.body);
 

@@ -887,7 +887,11 @@ export class NovelEngine {
   }
 
   setAbilityCatalog(list) {
-    this._abilityCatalog = Object.fromEntries((list || []).map((a) => [a.id, a]));
+    // Projects may ship abilities as an array or as an id->meta object map.
+    const abilities = Array.isArray(list) ? list : Object.values(list || {});
+    this._abilityCatalog = Object.fromEntries(
+      abilities.filter((a) => a && a.id).map((a) => [a.id, a])
+    );
   }
 
   openAbilities(open) {

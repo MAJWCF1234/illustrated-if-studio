@@ -182,6 +182,7 @@ async function main() {
     else {
       const cfg = fs.readFileSync(path.join(body.folder, "js", "config.js"), "utf8");
       if (!cfg.includes("../project/")) find("error", "HTML export config.js not rewritten");
+      if (!cfg.includes("initProjectBase")) find("error", "HTML export config.js missing initProjectBase");
       for (const f of [
         "Play the Game.vbs",
         "play-quiet.ps1",

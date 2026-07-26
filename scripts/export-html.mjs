@@ -7,6 +7,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import {
+  PACKAGED_HTML_CONFIG_JS,
+  PACKAGED_START_SERVER_JS,
+} from "../server/exporters/packaged-html-config.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const studioRoot = path.resolve(__dirname, "..");
@@ -52,11 +56,8 @@ copyDir(path.join(studioRoot, "engine-html"), staging);
 const projectOut = path.join(staging, "project");
 copyDir(projectDir, projectOut);
 
-// Point player at ./project/
-fs.writeFileSync(
-  path.join(staging, "js", "config.js"),
-  `/** Packaged build — project shipped beside the engine. */\nexport const PROJECT_BASE = new URL("../project/", import.meta.url);\n`
-);
+// Point player at ./project/ (must export initProjectBase — main.js imports it)
+fs.writeFileSync(path.join(staging, "js", "config.js"), PACKAGED_HTML_CONFIG_JS);
 
 // Friendly readme for the zip
 fs.writeFileSync(
@@ -76,29 +77,7 @@ Opening index.html via file:// will not load JSON in most browsers.
 );
 
 // Tiny starter for Windows/mac/linux using the studio serve pattern inlined
-fs.writeFileSync(
-  path.join(staging, "start-server.mjs"),
-  `import http from "node:http";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-const root = path.dirname(fileURLToPath(import.meta.url));
-const port = Number(process.env.PORT) || 8080;
-const types = { ".html":"text/html; charset=utf-8",".js":"text/javascript; charset=utf-8",".css":"text/css; charset=utf-8",".json":"application/json; charset=utf-8",".svg":"image/svg+xml",".png":"image/png",".jpg":"image/jpeg",".jpeg":"image/jpeg",".webp":"image/webp" };
-http.createServer((req,res)=>{
-  let rel = decodeURIComponent((req.url||"/").split("?")[0]);
-  if (rel === "/") rel = "/index.html";
-  let file = path.normalize(path.join(root, rel));
-  if (!file.startsWith(root)) { res.writeHead(403); return res.end("Forbidden"); }
-  if (fs.existsSync(file) && fs.statSync(file).isDirectory()) file = path.join(file, "index.html");
-  fs.readFile(file,(err,data)=>{
-    if (err) { res.writeHead(404); return res.end("Not found"); }
-    res.writeHead(200,{"Content-Type": types[path.extname(file).toLowerCase()] || "application/octet-stream"});
-    res.end(data);
-  });
-}).listen(port,()=>console.log("Play at http://127.0.0.1:"+port+"/"));
-`
-);
+fs.writeFileSync(path.join(staging, "start-server.mjs"), PACKAGED_START_SERVER_JS);
 
 fs.writeFileSync(
   path.join(staging, "start-server.bat"),

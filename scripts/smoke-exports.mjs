@@ -1,15 +1,17 @@
 #!/usr/bin/env node
 /**
  * Smoke-test: re-export all targets, verify package files, boot HTML player, play one beat.
+ * Includes a Playwright gate/title assertion so "Loading… forever" cannot pass.
  */
-import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
+import { chromium } from "playwright";
 import { exportHtml } from "../server/exporters/html.mjs";
 import { exportPython } from "../server/exporters/python.mjs";
 import { exportCpp } from "../server/exporters/cpp.mjs";
+import { copyDir, removeDir } from "../server/lib/fs-utils.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const studioRoot = path.resolve(__dirname, "..");
@@ -61,6 +63,55 @@ function startPackagedServer(webDir, port) {
       if (!ready) reject(new Error("packaged server timeout"));
     }, 8000);
   });
+}
+
+/** Ensure the player leaves Loading… and shows the name gate (or story UI). */
+async function assertPlayerBoots(baseUrl) {
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  const errors = [];
+  const badHttp = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  page.on("console", (msg) => {
+    if (msg.type() === "error") {
+      const t = msg.text();
+      if (!/Failed to load resource|404|net::ERR_/i.test(t)) errors.push(t);
+    }
+  });
+  page.on("response", (res) => {
+    if (res.status() < 400) return;
+    const url = res.url();
+    if (/\.(png|jpe?g|webp|gif|svg|mp3|ogg|wav)(\?|$)/i.test(url)) return;
+    if (/\/(assets|art)\//i.test(url)) return;
+    // Packaged HTML has no disk saves API; engine probes then falls back to localStorage.
+    if (/\/api\/saves(\/|$|\?)/i.test(url) && res.status() === 404) return;
+    badHttp.push(`${res.status()} ${url}`);
+  });
+
+  await page.goto(baseUrl, { waitUntil: "networkidle", timeout: 20000 });
+  await page.waitForFunction(
+    () => {
+      const title = document.getElementById("game-title")?.textContent?.trim() || "";
+      const gate = document.getElementById("gate");
+      const novel = document.getElementById("novel");
+      const gateOpen = gate && !gate.hidden;
+      const novelOpen = novel && !novel.hidden;
+      return title.length > 0 && !/^Loading/i.test(title) && (gateOpen || novelOpen);
+    },
+    { timeout: 15000 }
+  );
+
+  const title = (await page.locator("#game-title").innerText()).trim();
+  if (/^Loading/i.test(title)) throw new Error("Stuck on Loading… screen");
+  const gateVisible = await page.locator("#gate").isVisible();
+  const novelVisible = await page.locator("#novel").isVisible();
+  if (!gateVisible && !novelVisible) throw new Error("Neither name gate nor story UI visible");
+
+  if (badHttp.length) throw new Error("4xx/5xx on critical assets: " + badHttp.join("; "));
+  if (errors.length) throw new Error("page/console errors: " + errors.join("; "));
+
+  await browser.close();
+  return title;
 }
 
 async function main() {
@@ -118,7 +169,10 @@ async function main() {
   ]);
 
   const cfg = fs.readFileSync(path.join(html.folder, "js", "config.js"), "utf8");
-  if (!cfg.includes('../project/')) throw new Error("HTML export config.js not rewritten for package");
+  if (!cfg.includes("../project/")) throw new Error("HTML export config.js not rewritten for package");
+  if (!cfg.includes("initProjectBase")) {
+    throw new Error("HTML export config.js missing initProjectBase export (breaks module boot)");
+  }
 
   console.log("3) Boot packaged HTML on :18080 and load game data…");
   const child = await startPackagedServer(html.folder, 18080);
@@ -138,9 +192,14 @@ async function main() {
     console.log(`   Start: ${project.start} (${choices.length} choices)`);
     console.log(`   Beat:  ${start.text.slice(0, 80).replace(/\s+/g, " ")}…`);
 
+    const bootTitle = await assertPlayerBoots("http://127.0.0.1:18080/");
+    console.log(`   Playwright boot OK — gate title "${bootTitle}"`);
+
     // Studio live player (dev server) if up
     try {
-      const live = await fetchText("http://127.0.0.1:8787/engine-html/?preview=1&name=Tester&scene=" + encodeURIComponent(project.start));
+      const live = await fetchText(
+        "http://127.0.0.1:8787/engine-html/?preview=1&name=Tester&scene=" + encodeURIComponent(project.start)
+      );
       if (live.includes("boot-error") && live.includes("Failed")) {
         console.log("   warn: live player page contains boot-error markup (may be template)");
       } else {
@@ -151,6 +210,19 @@ async function main() {
     }
   } finally {
     child.kill();
+  }
+
+  console.log("3b) Boot packaged HTML from a path with spaces…");
+  const spacedDir = path.join(outRoot, "spaced export path", "sample-project-web");
+  removeDir(spacedDir);
+  copyDir(html.folder, spacedDir);
+  const spacedChild = await startPackagedServer(spacedDir, 18081);
+  try {
+    const spacedTitle = await assertPlayerBoots("http://127.0.0.1:18081/");
+    console.log(`   Spaced-path boot OK — gate title "${spacedTitle}"`);
+  } finally {
+    spacedChild.kill();
+    removeDir(path.join(outRoot, "spaced export path"));
   }
 
   console.log("4) Python runtime one-step check…");
