@@ -14,20 +14,25 @@ function readRaw(projectId, leaf) {
 }
 
 export function loadState(projectId, defaults = {}) {
-  const read = (leaf, fallback) => {
+  // Stored values are only trusted for shape, not just for parseability: a leaf
+  // that holds the wrong type would otherwise reach the engine and throw there.
+  const read = (leaf, fallback, ok) => {
     try {
       const raw = readRaw(projectId, leaf);
-      return raw == null ? fallback : JSON.parse(raw);
+      if (raw == null) return fallback;
+      const value = JSON.parse(raw);
+      return ok(value) ? value : fallback;
     } catch {
       return fallback;
     }
   };
+  const isPlainObject = (v) => Boolean(v) && typeof v === "object" && !Array.isArray(v);
   return {
     playerName: readRaw(projectId, "playerName") || "",
     currentScene: readRaw(projectId, "currentScene") || defaults.start || "start",
-    abilities: read("abilities", []),
-    vars: read("vars", {}),
-    history: read("history", []),
+    abilities: read("abilities", [], Array.isArray),
+    vars: read("vars", {}, isPlainObject),
+    history: read("history", [], Array.isArray),
   };
 }
 

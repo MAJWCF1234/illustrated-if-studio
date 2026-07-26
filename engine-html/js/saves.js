@@ -30,13 +30,23 @@ function lsKey(projectId, slot) {
   return `ifstudio:${projectId}:slot:${slot}`;
 }
 
+// Probed once per session: packaged games have no save API, and re-asking on
+// every slot operation cost a wasted request and a console 404 each time. Only
+// the answer is cached, never the slot list, which changes as the player saves.
+let apiProbe = null;
+
 async function apiAvailable() {
-  try {
-    const r = await fetch("/api/saves");
-    return r.ok;
-  } catch {
-    return false;
+  if (apiProbe === null) {
+    apiProbe = (async () => {
+      try {
+        const r = await fetch("/api/saves");
+        return r.ok;
+      } catch {
+        return false;
+      }
+    })();
   }
+  return apiProbe;
 }
 
 export async function listSlots(projectId) {

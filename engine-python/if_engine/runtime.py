@@ -12,6 +12,27 @@ from typing import Any
 from .saves import apply_slot, delete_slot, list_slots, read_slot, write_slot
 
 
+def _as_number(value: Any) -> float | None:
+    """Numeric value of a var, or None when it cannot be compared.
+
+    Mirrors the JS engine's Number() coercion: a misspelled or unset variable
+    makes the comparison simply false instead of ending the game.
+    """
+    if isinstance(value, bool):
+        return float(value)
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return 0.0  # JS Number("") is 0
+        try:
+            return float(text)
+        except ValueError:
+            return None
+    return None
+
+
 def eval_when(when: dict | None, state: dict) -> bool:
     if not when:
         return True
@@ -21,10 +42,13 @@ def eval_when(when: dict | None, state: dict) -> bool:
         left = state["vars"].get(when["var"])
         if "eq" in when:
             return left == when["eq"]
-        if "gte" in when:
-            return float(left) >= float(when["gte"])
-        if "lte" in when:
-            return float(left) <= float(when["lte"])
+        if "gte" in when or "lte" in when:
+            key = "gte" if "gte" in when else "lte"
+            lhs = _as_number(left)
+            rhs = _as_number(when[key])
+            if lhs is None or rhs is None:
+                return False
+            return lhs >= rhs if key == "gte" else lhs <= rhs
         if "truthy" in when:
             return bool(left) is bool(when["truthy"])
         return left is not None

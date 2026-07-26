@@ -69,6 +69,9 @@ export class NovelEngine {
     this._mode = "play"; // play | history
     this._skipMode = false;
     this._ctrlSkip = false;
+    // Scenes already auto-advanced through in the current skip run, so a
+    // cyclic story (A -> B -> A) stops instead of skipping forever.
+    this._skipChain = new Set();
     this.applyTheme();
     this.bindUi();
     this.syncAudioControls();
@@ -213,6 +216,7 @@ export class NovelEngine {
         this._skipMode = !this._skipMode;
         btnSkip.setAttribute("aria-pressed", this._skipMode ? "true" : "false");
         btnSkip.textContent = this._skipMode ? "Skip read ✓" : "Skip read";
+        this.resetSkipChain();
         if (this._skipMode) this.scheduleSkipAdvance();
         else this.clearSkipTimer();
       });
@@ -280,12 +284,18 @@ export class NovelEngine {
     document.addEventListener("keyup", (e) => {
       if (e.key === "Control" || e.key === "Meta") {
         this._ctrlSkip = false;
-        if (!this._skipMode) this.clearSkipTimer();
+        if (!this._skipMode) {
+          this.clearSkipTimer();
+          this.resetSkipChain();
+        }
       }
     });
     window.addEventListener("blur", () => {
       this._ctrlSkip = false;
-      if (!this._skipMode) this.clearSkipTimer();
+      if (!this._skipMode) {
+        this.clearSkipTimer();
+        this.resetSkipChain();
+      }
     });
   }
 
@@ -298,6 +308,22 @@ export class NovelEngine {
       clearTimeout(this._skipTimer);
       this._skipTimer = null;
     }
+  }
+
+  /** Forget the auto-advance trail — call on any deliberate navigation. */
+  resetSkipChain() {
+    this._skipChain.clear();
+  }
+
+  stopSkipMode(message) {
+    this.resetSkipChain();
+    if (!this._skipMode) return;
+    this._skipMode = false;
+    if (this.root.btnSkip) {
+      this.root.btnSkip.setAttribute("aria-pressed", "false");
+      this.root.btnSkip.textContent = "Skip read";
+    }
+    if (message) this.toast(message);
   }
 
   scheduleSkipAdvance() {
@@ -339,6 +365,7 @@ export class NovelEngine {
       return false;
     }
     this.clearSkipTimer();
+    this.resetSkipChain();
     this.state.history.pop();
     const prev = this.state.history[this.state.history.length - 1];
     this.persist("history", this.state.history);
@@ -352,24 +379,28 @@ export class NovelEngine {
   trySkipAdvance() {
     this._skipTimer = null;
     if (!this.isSkipActive() || this._mode !== "play" || this.root.novel.hidden) return false;
-    if (!this._lastShowWasSeen) return false;
+    if (!this._lastShowWasSeen) {
+      this._skipChain.clear();
+      return false;
+    }
     const sceneId = this.state.currentScene;
+    if (this._skipChain.has(sceneId)) {
+      this.stopSkipMode("Skip stopped — the story loops back here");
+      return false;
+    }
     const choices = (this.scenes[sceneId]?.choices || []).filter((c) => evalWhen(c.when, this.state));
-    if (!choices.length) return false;
+    if (!choices.length) {
+      this._skipChain.clear();
+      return false;
+    }
     const preferred = this.lastChoiceByScene[sceneId];
     let pick = preferred ? choices.find((c) => c.text === preferred) : null;
     if (!pick && choices.length === 1) pick = choices[0];
     if (!pick) {
-      if (this._skipMode) {
-        this._skipMode = false;
-        if (this.root.btnSkip) {
-          this.root.btnSkip.setAttribute("aria-pressed", "false");
-          this.root.btnSkip.textContent = "Skip read";
-        }
-        this.toast("Skip stopped — choose a branch");
-      }
+      this.stopSkipMode("Skip stopped — choose a branch");
       return false;
     }
+    this._skipChain.add(sceneId);
     if (pick.set) {
       Object.assign(this.state.vars, pick.set);
       this.persist("vars", this.state.vars);
@@ -533,6 +564,8 @@ export class NovelEngine {
         this.toast("That slot is empty");
         return;
       }
+      this.clearSkipTimer();
+      this.resetSkipChain();
       applySnapshot(this.state, result.save);
       // Mirror into autosave leaves so Continue works
       this.persist("playerName", this.state.playerName);
@@ -723,10 +756,34 @@ export class NovelEngine {
 
     if (!scene || !scene.text) {
       this.root.speaker.hidden = true;
-      this.root.storyText.textContent = `Error: Scene "${key}" is missing or incomplete.`;
+      this.root.storyText.textContent =
+        `This part of the story isn't there anymore (scene "${key}").` +
+        ` It was probably renamed or removed while the story was being edited.`;
       this.setSprite(this.root.spriteLeft, null);
       this.setSprite(this.root.spriteRight, null);
       this.setBackground("default.svg");
+      this.stopSkipMode();
+      // Without an exit the saved position keeps landing here on every visit.
+      if (this.canRollback()) {
+        const back = document.createElement("button");
+        back.className = "btn";
+        back.textContent = "Go back a step";
+        back.addEventListener("click", () => this.rollback());
+        box.appendChild(back);
+      }
+      if (this.scenes[this.startId]) {
+        const restart = document.createElement("button");
+        restart.className = "btn utility";
+        restart.textContent = "Start from the beginning";
+        restart.addEventListener("click", () => {
+          this.clearSkipTimer();
+          this.resetSkipChain();
+          this.state.history = [];
+          this.persist("history", this.state.history);
+          this.showScene(this.startId);
+        });
+        box.appendChild(restart);
+      }
       this.markSeen(key);
       this.updateNavButtons();
       return;
@@ -782,6 +839,7 @@ export class NovelEngine {
         btn.appendChild(document.createTextNode(label));
         btn.addEventListener("click", () => {
           this.clearSkipTimer();
+          this.resetSkipChain();
           if (choice.set) {
             Object.assign(this.state.vars, choice.set);
             this.persist( "vars", this.state.vars);
@@ -850,6 +908,8 @@ export class NovelEngine {
       jump.addEventListener("click", () => {
         this.state.history = this.state.history.slice(0, index + 1);
         this.persist( "history", this.state.history);
+        this.clearSkipTimer();
+        this.resetSkipChain();
         this._suppressSkipOnce = true;
         this.showScene(entry.id, entry.choice || null, { recordHistory: false });
       });
@@ -906,6 +966,8 @@ export class NovelEngine {
 
   restart() {
     const keep = Boolean(this.project.meta?.keepAbilitiesOnRestart);
+    this.stopSkipMode();
+    this.clearSkipTimer();
     this.audio.stopBgm();
     if (this.previewMode) {
       this.state = {

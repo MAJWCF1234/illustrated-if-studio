@@ -5,7 +5,13 @@ import { fileURLToPath } from "node:url";
 import { listImageFiles, readJson, writeJson, ensureDir } from "./lib/fs-utils.mjs";
 import { validateProject } from "./lib/validate.mjs";
 import { mergeTheme } from "./lib/theme-defaults.mjs";
-import { loadSettings, saveSettings, resolveExportDestination, listProjects } from "./lib/settings.mjs";
+import {
+  loadSettings,
+  saveSettings,
+  resolveExportDestination,
+  describeUnsafeDestination,
+  listProjects,
+} from "./lib/settings.mjs";
 import { exportHtml } from "./exporters/html.mjs";
 import { exportPython } from "./exporters/python.mjs";
 import { exportCpp } from "./exporters/cpp.mjs";
@@ -87,7 +93,10 @@ async function readJsonBody(req) {
   const raw = await readBody(req);
   if (!raw || !String(raw).trim()) return {};
   try {
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    // Valid JSON that is not an object (null, 42, "text") would otherwise make
+    // every `body.field` read throw a 500 instead of a useful reply.
+    return parsed && typeof parsed === "object" ? parsed : {};
   } catch (err) {
     const e = new Error(`Invalid JSON body: ${err.message}`);
     e.status = 400;
@@ -105,8 +114,20 @@ function resolveOutRoot(destination) {
   return path.resolve(chosen);
 }
 
+/** Throws a 400-shaped error when a destination would write into a system tree. */
+function assertSafeDestination(destination) {
+  const chosen = String(destination || "").trim();
+  if (!chosen) return;
+  const reason = describeUnsafeDestination(chosen);
+  if (!reason) return;
+  const err = new Error(reason);
+  err.status = 400;
+  throw err;
+}
+
 function runExport(target, opts = {}) {
   const projectDir = getProjectDir();
+  assertSafeDestination(opts.destination);
   const exportOut = resolveOutRoot(opts.destination);
   const args = { studioRoot, projectDir, outRoot: exportOut };
   if (target === "html") return exportHtml(args);
@@ -114,13 +135,16 @@ function runExport(target, opts = {}) {
   if (target === "cpp") return exportCpp(args);
   if (target === "raw") {
     const destination = resolveExportDestination(studioRoot, opts.destination);
+    assertSafeDestination(destination);
     return exportRawProject({
       projectDir,
       destination,
       folderName: opts.folderName,
     });
   }
-  throw new Error(`Unknown export target: ${target}`);
+  const err = new Error(`Unknown export target: ${target}`);
+  err.status = 400;
+  throw err;
 }
 
 function formatExportResult(result) {
@@ -186,7 +210,12 @@ async function handleApi(req, res, urlPath, searchParams) {
   if (req.method === "PUT" && urlPath === "/api/settings") {
     const body = await readJsonBody(req);
     const patch = {};
-    if ("exportDestination" in body) patch.exportDestination = String(body.exportDestination || "").trim();
+    if ("exportDestination" in body) {
+      const dest = String(body.exportDestination || "").trim();
+      const reason = dest ? describeUnsafeDestination(dest) : null;
+      if (reason) return sendJson(res, 400, { error: reason });
+      patch.exportDestination = dest;
+    }
     if ("lastImportPath" in body) patch.lastImportPath = String(body.lastImportPath || "").trim();
     if ("activeProjectId" in body && !envProject) {
       const id = String(body.activeProjectId || "").trim();
@@ -301,7 +330,17 @@ async function handleApi(req, res, urlPath, searchParams) {
 
   if (req.method === "PUT" && urlPath === "/api/theme") {
     const body = await readJsonBody(req);
-    const theme = mergeTheme(body.theme || body);
+    const incoming = body.theme || body;
+    // Without this, a request that forgot its payload replaces a hand-tuned
+    // design with stock defaults and only leaves a .bak behind.
+    const looksLikeTheme =
+      incoming &&
+      typeof incoming === "object" &&
+      ["id", "colors", "fonts", "layout", "audio", "templates"].some((k) => k in incoming);
+    if (!looksLikeTheme) {
+      return sendJson(res, 400, { error: "Body must include a theme object" });
+    }
+    const theme = mergeTheme(incoming);
     const project = readJson(path.join(projectDir, "project.json"));
     const themeRel = project.theme || "theme/theme.json";
     const outPath = safeProjectPath(themeRel);
@@ -371,11 +410,12 @@ async function handleApi(req, res, urlPath, searchParams) {
         target = body.target || searchParams.get("target") || "html";
         destination = body.destination || "";
         folderName = body.folderName || "";
+        assertSafeDestination(destination);
         if (body.saveDestination && body.destination) {
           saveSettings(studioRoot, { exportDestination: String(body.destination).trim() });
         }
       } catch (err) {
-        if (err.status === 400) return sendJson(res, 400, { error: err.message });
+        if (err.status === 400) return sendJson(res, 400, { ok: false, error: err.message });
         target = searchParams.get("target") || "html";
       }
     }
@@ -383,7 +423,7 @@ async function handleApi(req, res, urlPath, searchParams) {
       const result = formatExportResult(runExport(target, { destination, folderName }));
       return sendJson(res, result.ok ? 200 : 400, result);
     } catch (err) {
-      return sendJson(res, 500, { ok: false, error: String(err.message || err) });
+      return sendJson(res, err.status || 500, { ok: false, error: String(err.message || err) });
     }
   }
 
@@ -393,11 +433,12 @@ async function handleApi(req, res, urlPath, searchParams) {
       try {
         const body = await readJsonBody(req);
         destination = body.destination || "";
+        assertSafeDestination(destination);
         if (body.saveDestination && body.destination) {
           saveSettings(studioRoot, { exportDestination: String(body.destination).trim() });
         }
       } catch (err) {
-        if (err.status === 400) return sendJson(res, 400, { error: err.message });
+        if (err.status === 400) return sendJson(res, 400, { ok: false, error: err.message });
         // empty body is fine
       }
       const results = ["html", "python", "cpp", "raw"].map((t) =>
@@ -407,7 +448,7 @@ async function handleApi(req, res, urlPath, searchParams) {
       const output = results.map((r) => r.output).join("\n\n---\n\n");
       return sendJson(res, ok ? 200 : 400, { ok, results, output });
     } catch (err) {
-      return sendJson(res, 500, { ok: false, error: String(err.message || err) });
+      return sendJson(res, err.status || 500, { ok: false, error: String(err.message || err) });
     }
   }
 
@@ -458,7 +499,15 @@ async function handleApi(req, res, urlPath, searchParams) {
       ...result,
       activeProjectId: getActiveProjectId(),
       output: result.ok
-        ? `Imported ${result.projectId} (${result.sceneCount} scenes)\n${result.projectDir}`
+        ? [
+            `Imported ${result.projectId} (${result.sceneCount} scenes)`,
+            result.projectDir,
+            result.replacedBackup
+              ? `The project that was there is kept at ${result.replacedBackup} in case you need it back.`
+              : null,
+          ]
+            .filter(Boolean)
+            .join("\n")
         : (result.errors || []).join("\n"),
     });
   }

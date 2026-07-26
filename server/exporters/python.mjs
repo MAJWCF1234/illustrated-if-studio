@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { copyDir, ensureDir, removeDir, slugify } from "../lib/fs-utils.mjs";
+import { copyDir, ensureDir, removeDir, slugify, safeLabel } from "../lib/fs-utils.mjs";
 import { validateProject } from "../lib/validate.mjs";
 import { zipDirectory } from "../lib/zip.mjs";
 import { installWindowsScripts } from "./windows-scripts.mjs";
@@ -97,9 +97,10 @@ export function exportPython({ studioRoot, projectDir, outRoot }) {
 pygame>=2.5
 `
   );
+  const title = safeLabel(project.title, slug);
   fs.writeFileSync(
     path.join(staging, "README.md"),
-    `# ${project.title}
+    `# ${title}
 
 Python package for an **illustrated text-based RPG** — a graphical desktop
 player (pygame) with backgrounds, character sprites, and the project's theme.
@@ -150,7 +151,7 @@ pyinstaller --onefile --windowed --add-data "project;project" --add-data "if_eng
   );
   fs.writeFileSync(
     path.join(staging, "README.txt"),
-    `${project.title}
+    `${title}
 
 How to play (Windows)
 ---------------------

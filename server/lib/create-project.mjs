@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { ensureDir, removeDir, writeJson, slugify } from "./fs-utils.mjs";
+import { ensureDir, retireProject, writeJson, slugify } from "./fs-utils.mjs";
 import { mergeTheme, DEFAULT_THEME } from "./theme-defaults.mjs";
 
 const DEFAULT_SVG = `<?xml version="1.0" encoding="UTF-8"?>
@@ -34,7 +34,7 @@ export function createProject({ studioRoot, projectId, title, author, overwrite 
     };
   }
 
-  removeDir(dest);
+  const replaced = retireProject(dest);
   ensureDir(path.join(dest, "story"));
   ensureDir(path.join(dest, "assets", "scene_images"));
   ensureDir(path.join(dest, "assets", "characters"));
@@ -122,5 +122,6 @@ export function createProject({ studioRoot, projectId, title, author, overwrite 
     projectDir: dest,
     created: true,
     sceneCount: 3,
+    replacedBackup: replaced,
   };
 }

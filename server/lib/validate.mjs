@@ -23,7 +23,8 @@ export function validateProject(projectDir) {
   const scenes = scenesDoc.scenes || scenesDoc;
   const ids = new Set(Object.keys(scenes));
 
-  if (!ids.has(project.start)) errors.push(`Start scene missing: ${project.start}`);
+  if (!ids.has(project.start))
+    errors.push(`The story's start scene "${project.start}" is missing — pick an existing scene as the start`);
 
   let scripts = { hooks: {} };
   try {
@@ -39,11 +40,12 @@ export function validateProject(projectDir) {
 
   const inbound = Object.fromEntries([...ids].map((id) => [id, 0]));
   for (const [id, scene] of Object.entries(scenes)) {
-    if (!scene.text) errors.push(`Scene ${id} missing text`);
+    if (!scene.text) errors.push(`Scene "${id}" has no story text yet`);
     for (const c of scene.choices || []) {
-      if (!c.text) errors.push(`Scene ${id} has choice with empty text`);
-      if (!c.next) errors.push(`Scene ${id} has choice with empty next`);
-      else if (!ids.has(c.next)) errors.push(`Broken link ${id} → ${c.next}`);
+      if (!c.text) errors.push(`Scene "${id}" has a choice with no label — players need something to click`);
+      if (!c.next) errors.push(`Scene "${id}" has a choice that doesn't go anywhere — pick a target scene`);
+      else if (!ids.has(c.next))
+        errors.push(`A choice in "${id}" points to "${c.next}", but that scene doesn't exist`);
       else inbound[c.next]++;
     }
     const hook = scene.hooks?.onEnter;
@@ -79,10 +81,18 @@ export function validateProject(projectDir) {
   }
 
   for (const id of ids) {
-    if (id !== project.start && (inbound[id] || 0) === 0) warnings.push(`Orphan scene: ${id}`);
+    if (id !== project.start && (inbound[id] || 0) === 0) {
+      warnings.push(`Scene "${id}" is never linked from anywhere — players can't reach it`);
+    }
   }
   const dead = [...ids].filter((id) => !(scenes[id].choices || []).length);
-  if (dead.length) warnings.push(`Dead-end scenes: ${dead.length}`);
+  if (dead.length) {
+    warnings.push(
+      `${dead.length} scene${dead.length === 1 ? "" : "s"} with no choices (dead end): ${dead.slice(0, 8).join(", ")}${
+        dead.length > 8 ? "…" : ""
+      }`
+    );
+  }
 
   const locales = project.locales;
   if (locales && typeof locales === "object") {

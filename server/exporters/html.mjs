@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { copyDir, ensureDir, removeDir, slugify } from "../lib/fs-utils.mjs";
+import { copyDir, ensureDir, removeDir, slugify, safeLabel } from "../lib/fs-utils.mjs";
 import { validateProject } from "../lib/validate.mjs";
 import { zipDirectory } from "../lib/zip.mjs";
 import { installWindowsScripts } from "./windows-scripts.mjs";
@@ -26,8 +26,8 @@ export function exportHtml({ studioRoot, projectDir, outRoot }) {
 
   fs.writeFileSync(
     path.join(staging, "README.txt"),
-    `${project.title}
-by ${project.author || "Unknown"}
+    `${safeLabel(project.title, slug)}
+by ${safeLabel(project.author, "Unknown")}
 
 Illustrated text-based RPG (HTML package)
 

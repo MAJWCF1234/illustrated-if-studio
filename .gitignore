@@ -20,6 +20,9 @@ tools/.export-tools-ready
 # Player save slots are runtime data; savesDir() recreates them on demand
 projects/*/saves/
 
+# Projects set aside by an overwrite during create/import — local safety net
+projects/.replaced/
+
 # Launcher diagnostics written next to the studio on every start
 tools/logs/
 

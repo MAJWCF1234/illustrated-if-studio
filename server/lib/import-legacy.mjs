@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
-import { ensureDir, readJson, removeDir, writeJson, slugify, copyDir } from "./fs-utils.mjs";
+import { ensureDir, readJson, retireProject, writeJson, slugify, copyDir } from "./fs-utils.mjs";
 import { mergeTheme } from "./theme-defaults.mjs";
 import { validateProject } from "./validate.mjs";
 
@@ -47,7 +47,7 @@ export function importLegacyHtml({ studioRoot, sourcePath, projectId, title, aut
       errors: [`Project "${id}" already exists. Pass overwrite: true to replace it.`],
     };
   }
-  removeDir(dest);
+  const replaced = retireProject(dest);
   ensureDir(path.join(dest, "story"));
   ensureDir(path.join(dest, "assets", "scene_images"));
   ensureDir(path.join(dest, "assets", "characters"));
@@ -136,5 +136,6 @@ export function importLegacyHtml({ studioRoot, sourcePath, projectId, title, aut
     abilityGates: migrated,
     errors: report.errors,
     warnings: report.warnings,
+    replacedBackup: replaced,
   };
 }

@@ -26,6 +26,7 @@ if %errorlevel% neq 0 (
 )
 
 echo Starting HTML player...
-start "" cmd /c "timeout /t 2 /nobreak >nul & start http://127.0.0.1:8080/"
+:: start-server.mjs picks a free port and opens the browser itself, so the
+:: address is always the one it actually claimed.
 node "%~dp0start-server.mjs"
 pause

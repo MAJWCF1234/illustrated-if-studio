@@ -1,6 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
-import { copyDir, ensureDir, readJson, removeDir, writeJson, slugify } from "../lib/fs-utils.mjs";
+import {
+  copyDir,
+  ensureDir,
+  readJson,
+  removeDir,
+  retireProject,
+  writeJson,
+  slugify,
+  safeLabel,
+} from "../lib/fs-utils.mjs";
 import { validateProject } from "../lib/validate.mjs";
 import { mergeTheme, DEFAULT_THEME } from "../lib/theme-defaults.mjs";
 
@@ -44,7 +53,7 @@ export function exportRawProject({ projectDir, destination, folderName }) {
   if (!fs.existsSync(readme)) {
     fs.writeFileSync(
       readme,
-      `# ${project.title || project.id}
+      `# ${safeLabel(project.title, project.id || name)}
 
 Raw **Illustrated IF Studio** project.
 
@@ -102,7 +111,7 @@ export function importProjectFolder({ studioRoot, sourcePath, projectId, overwri
     };
   }
 
-  removeDir(dest);
+  const replaced = retireProject(dest);
   ensureDir(path.dirname(dest));
   copyDir(src, dest, {
     filter: (entry) => !entry.name.endsWith(".bak") && entry.name !== "node_modules",
@@ -135,6 +144,7 @@ export function importProjectFolder({ studioRoot, sourcePath, projectId, overwri
     errors: report.errors,
     warnings: report.warnings,
     sceneCount: report.sceneCount,
+    replacedBackup: replaced,
   };
 }
 

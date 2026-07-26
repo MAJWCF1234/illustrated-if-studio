@@ -26,6 +26,35 @@ export function ensureDir(dir) {
 }
 
 /**
+ * Move a project out of the way instead of deleting it, so that overwriting a
+ * project during create/import stays recoverable. Someone's only copy of a
+ * story is not something to delete on the strength of one confirm dialog.
+ *
+ * Returns the archive path, or null when there was nothing there.
+ */
+export function retireProject(projectDir) {
+  if (!fs.existsSync(projectDir)) return null;
+  const projectsRoot = path.dirname(projectDir);
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const trash = path.join(projectsRoot, ".replaced", `${path.basename(projectDir)}-${stamp}`);
+  fs.mkdirSync(path.dirname(trash), { recursive: true });
+  try {
+    fs.renameSync(projectDir, trash);
+    return trash;
+  } catch {
+    // Different volume or a lock: fall back to a copy, then the usual delete.
+    try {
+      copyDir(projectDir, trash);
+      removeDir(projectDir);
+      return trash;
+    } catch {
+      removeDir(projectDir);
+      return null;
+    }
+  }
+}
+
+/**
  * Recursively delete a staging/export directory.
  *
  * On Windows an antivirus scan of a freshly written binary briefly holds the
@@ -66,8 +95,41 @@ export function removeDir(target) {
   );
 }
 
+function slugFingerprint(raw) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < raw.length; i++) {
+    h ^= raw.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(36);
+}
+
+const WIN_RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+
 export function slugify(id) {
-  return String(id || "game").replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+  const raw = String(id || "game");
+  let s = raw
+    .replace(/[^a-z0-9-]/gi, "-")
+    .toLowerCase()
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+  if (!s) s = `p${slugFingerprint(raw)}`;
+  if (WIN_RESERVED.test(s)) s = `game-${s}`;
+  if (s.length > 60) {
+    s = `${s.slice(0, 40).replace(/-$/, "")}-${slugFingerprint(raw)}`;
+  }
+  return s;
+}
+
+/** Strip controls / non-strings for package README labels. */
+export function safeLabel(value, fallback = "Untitled") {
+  if (typeof value !== "string") {
+    if (value == null) return fallback;
+    if (typeof value === "object") return fallback;
+    value = String(value);
+  }
+  const cleaned = value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim();
+  return cleaned || fallback;
 }
 
 export function listImageFiles(dir) {
