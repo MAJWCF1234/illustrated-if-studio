@@ -18,7 +18,10 @@ export function exportStaticHtml({ studioRoot, projectDir, outRoot }) {
   removeDir(staging);
   ensureDir(staging);
   copyDir(path.join(studioRoot, "engine-html"), staging);
-  copyDir(projectDir, path.join(staging, "project"));
+  // This folder is uploaded publicly, so never publish local saves or backups.
+  copyDir(projectDir, path.join(staging, "project"), {
+    filter: (entry) => entry.name !== "saves" && !entry.name.endsWith(".bak"),
+  });
   fs.writeFileSync(path.join(staging, "js", "config.js"), STATIC_SITE_CONFIG_JS);
   fs.writeFileSync(
     path.join(staging, "README.txt"),

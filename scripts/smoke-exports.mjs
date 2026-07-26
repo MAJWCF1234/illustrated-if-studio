@@ -26,6 +26,13 @@ function assertPackage(staging, files) {
   for (const f of files) mustExist(path.join(staging, f), f);
 }
 
+/** Player packages must not expose the author's local progress or backups. */
+function assertNoPrivateProjectFiles(staging) {
+  for (const rel of ["project/saves", "project/story/scenes.json.bak", "project/theme/theme.json.bak"]) {
+    if (fs.existsSync(path.join(staging, rel))) throw new Error(`Private project file leaked: ${rel}`);
+  }
+}
+
 async function fetchText(url) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${url} -> ${res.status}`);
@@ -167,6 +174,7 @@ async function main() {
     "_emergency/SETUP-ADMIN.ps1",
     "_emergency/_common.ps1",
   ]);
+  for (const pack of [html, py, cpp]) assertNoPrivateProjectFiles(pack.folder);
 
   const cfg = fs.readFileSync(path.join(html.folder, "js", "config.js"), "utf8");
   if (!cfg.includes("../project/")) throw new Error("HTML export config.js not rewritten for package");

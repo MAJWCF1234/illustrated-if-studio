@@ -20,7 +20,10 @@ export function exportHtml({ studioRoot, projectDir, outRoot }) {
   removeDir(staging);
   ensureDir(staging);
   copyDir(path.join(studioRoot, "engine-html"), staging);
-  copyDir(projectDir, path.join(staging, "project"));
+  // Save slots and editor backups belong to the author, not a shared game zip.
+  copyDir(projectDir, path.join(staging, "project"), {
+    filter: (entry) => entry.name !== "saves" && !entry.name.endsWith(".bak"),
+  });
 
   fs.writeFileSync(path.join(staging, "js", "config.js"), PACKAGED_HTML_CONFIG_JS);
 

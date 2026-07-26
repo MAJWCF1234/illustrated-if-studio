@@ -88,7 +88,10 @@ export function exportPython({ studioRoot, projectDir, outRoot }) {
   const noPycache = { filter: (entry) => entry.name !== "__pycache__" };
   copyDir(path.join(studioRoot, "engine-python", "if_engine"), path.join(staging, "if_engine"), noPycache);
   copyDir(path.join(studioRoot, "engine-python", "if_gui"), path.join(staging, "if_gui"), noPycache);
-  copyDir(projectDir, path.join(staging, "project"));
+  // Do not ship the author's local saves or stale editor backup files.
+  copyDir(projectDir, path.join(staging, "project"), {
+    filter: (entry) => entry.name !== "saves" && !entry.name.endsWith(".bak"),
+  });
   fs.writeFileSync(path.join(staging, "app.py"), APP_PY);
   fs.writeFileSync(
     path.join(staging, "requirements.txt"),

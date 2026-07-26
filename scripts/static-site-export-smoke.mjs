@@ -57,7 +57,14 @@ async function main() {
     for (const file of ["index.html", "css/theme.css", "js/main.js", "js/config.js", "project/project.json", "README.txt"]) {
       mustExist(path.join(result.folder, file));
     }
-    for (const forbidden of ["start-server.mjs", "Play the Game.vbs", "PLAY.bat"]) {
+    for (const forbidden of [
+      "start-server.mjs",
+      "Play the Game.vbs",
+      "PLAY.bat",
+      "project/saves",
+      "project/story/scenes.json.bak",
+      "project/theme/theme.json.bak",
+    ]) {
       if (fs.existsSync(path.join(result.folder, forbidden))) {
         throw new Error(`Static site should not ship ${forbidden}`);
       }
