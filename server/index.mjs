@@ -71,19 +71,42 @@ function readBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let total = 0;
+    let settled = false;
+    const fail = (err) => {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    };
+    // Prefer Content-Length so we can 413 before buffering anything.
+    const declared = Number(req.headers["content-length"]);
+    if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) {
+      const err = new Error(`Request body too large (max ${MAX_BODY_BYTES} bytes)`);
+      err.status = 413;
+      // Drain so the client can still read our JSON 413 (destroying the socket
+      // used to surface as ECONNRESET with no usable error in the editor).
+      req.resume();
+      fail(err);
+      return;
+    }
     req.on("data", (c) => {
+      if (settled) return;
       total += c.length;
       if (total > MAX_BODY_BYTES) {
         const err = new Error(`Request body too large (max ${MAX_BODY_BYTES} bytes)`);
         err.status = 413;
-        reject(err);
-        req.destroy();
+        chunks.length = 0;
+        req.resume();
+        fail(err);
         return;
       }
       chunks.push(c);
     });
-    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
-    req.on("error", reject);
+    req.on("end", () => {
+      if (settled) return;
+      settled = true;
+      resolve(Buffer.concat(chunks).toString("utf8"));
+    });
+    req.on("error", fail);
   });
 }
 
@@ -365,10 +388,18 @@ async function handleApi(req, res, urlPath, searchParams) {
   if (req.method === "POST" && urlPath === "/api/projects") {
     if (envProject) return sendJson(res, 400, { error: "IF_PROJECT/VN_PROJECT lock — cannot create projects" });
     const body = await readJsonBody(req);
+    const title = body.title != null ? String(body.title).trim() : "";
+    const projectId = body.projectId || body.id;
+    const idHint = projectId != null ? String(projectId).trim() : "";
+    // Empty body used to silently create "new-game" — beginners typing nothing
+    // (or a CLI flag with no value) should get a clear 400 instead.
+    if (!title && !idHint) {
+      return sendJson(res, 400, { error: "Provide a title or project id" });
+    }
     const result = createProject({
       studioRoot,
-      projectId: body.projectId || body.id,
-      title: body.title,
+      projectId: idHint || undefined,
+      title: title || undefined,
       author: body.author,
       overwrite: Boolean(body.overwrite),
     });
@@ -632,13 +663,17 @@ async function handleApi(req, res, urlPath, searchParams) {
       });
     }
 
-    if (result.ok && body.activate !== false && !envProject) {
-      saveSettings(studioRoot, {
-        activeProjectId: result.projectId,
-        lastImportPath: sourcePath,
-      });
-    } else {
-      saveSettings(studioRoot, { lastImportPath: sourcePath });
+    // Only remember paths that actually imported — a failed attempt used to
+    // pre-fill the Projects tab with a known-bad path on the next visit.
+    if (result.ok) {
+      if (body.activate !== false && !envProject) {
+        saveSettings(studioRoot, {
+          activeProjectId: result.projectId,
+          lastImportPath: sourcePath,
+        });
+      } else {
+        saveSettings(studioRoot, { lastImportPath: sourcePath });
+      }
     }
 
     return sendJson(res, result.ok ? 200 : 400, {

@@ -54,9 +54,15 @@ function takeGreedyFlag(args, name) {
   if (i < 0) return null;
   let end = i + 1;
   while (end < args.length && !String(args[end]).startsWith("--")) end += 1;
+  // Flag with no value used to return boolean true → `new --title` created a
+  // project literally named "true". Treat bare flags as missing instead.
+  if (end === i + 1) {
+    args.splice(i, 1);
+    return null;
+  }
   const val = args.slice(i + 1, end).join(" ").trim();
   args.splice(i, end - i);
-  return val || true;
+  return val || null;
 }
 
 async function api(path, opts = {}) {
@@ -133,6 +139,9 @@ export async function runCliCommand(line, ctx) {
     case "switch": {
       const id = args[0];
       if (!id) return { text: "usage: use <project-id>", ok: false };
+      if (ctx.confirmDiscard && !(await ctx.confirmDiscard("switch projects"))) {
+        return { text: "Cancelled — unsaved edits kept.", ok: false };
+      }
       const { ok, data } = await api("/api/settings", {
         method: "PUT",
         body: JSON.stringify({ activeProjectId: id }),
@@ -172,7 +181,9 @@ export async function runCliCommand(line, ctx) {
     }
 
     case "validate": {
-      if (ctx.saveFirst) await ctx.saveFirst();
+      if (ctx.saveFirst && (await ctx.saveFirst()) === false) {
+        return { text: "Save failed — fix that before validating.", ok: false };
+      }
       const { ok, data } = await api("/api/validate", { method: "POST" });
       return { text: data?.output || data?.error || JSON.stringify(data, null, 2), ok: data?.ok !== false && ok };
     }
@@ -184,7 +195,9 @@ export async function runCliCommand(line, ctx) {
     }
 
     case "scenes": {
-      if (ctx.saveFirst) await ctx.saveFirst();
+      if (ctx.saveFirst && (await ctx.saveFirst()) === false) {
+        return { text: "Save failed — fix that before listing scenes.", ok: false };
+      }
       const { ok, data } = await api("/api/project");
       if (!ok) return { text: data?.error || "failed", ok: false };
       const ids = Object.keys(data.scenes?.scenes || data.scenes || {});
@@ -198,7 +211,9 @@ export async function runCliCommand(line, ctx) {
     case "scene": {
       const id = args[0];
       if (!id) return { text: "usage: scene <id>", ok: false };
-      if (ctx.saveFirst) await ctx.saveFirst();
+      if (ctx.saveFirst && (await ctx.saveFirst()) === false) {
+        return { text: "Save failed — fix that before peeking a scene.", ok: false };
+      }
       const { ok, data } = await api("/api/project");
       if (!ok) return { text: data?.error || "failed", ok: false };
       const scene = (data.scenes?.scenes || data.scenes || {})[id];
@@ -218,7 +233,9 @@ export async function runCliCommand(line, ctx) {
     }
 
     case "export": {
-      if (ctx.saveFirst) await ctx.saveFirst();
+      if (ctx.saveFirst && (await ctx.saveFirst()) === false) {
+        return { text: "Save failed — fix that before exporting.", ok: false };
+      }
       const dest = takeGreedyFlag(args, "--dest");
       const target = (args[0] || "").toLowerCase();
       if (!["html", "python", "cpp", "raw", "all"].includes(target)) {
@@ -250,6 +267,9 @@ export async function runCliCommand(line, ctx) {
 
     case "new":
     case "create": {
+      if (ctx.confirmDiscard && !(await ctx.confirmDiscard("create a new project"))) {
+        return { text: "Cancelled — unsaved edits kept.", ok: false };
+      }
       const idFlag = takeGreedyFlag(args, "--id");
       const titleFlag = takeGreedyFlag(args, "--title");
       const authorFlag = takeGreedyFlag(args, "--author");
@@ -287,6 +307,9 @@ export async function runCliCommand(line, ctx) {
       const kind = (args.shift() || "").toLowerCase();
       if (kind !== "folder" && kind !== "html") {
         return { text: "usage: import folder <path> [--id name] [--overwrite]\n       import html <path> [--id name] [--title Title] [--overwrite]", ok: false };
+      }
+      if (ctx.confirmDiscard && !(await ctx.confirmDiscard("import a project"))) {
+        return { text: "Cancelled — unsaved edits kept.", ok: false };
       }
       const idFlag = takeGreedyFlag(args, "--id");
       const titleFlag = takeGreedyFlag(args, "--title");

@@ -848,37 +848,93 @@ let saveInFlight = null;
 async function saveProject() {
   if (saveInFlight) return saveInFlight;
   saveInFlight = (async () => {
-    flushInspectorToState();
-    designApi?.flush?.();
-    const scenesRes = await fetch("/api/scenes", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ start: state.startId, scenes: state.scenes }),
-    });
-    const scenesData = await scenesRes.json();
-    if (!scenesRes.ok) {
-      showLog("Save failed", scenesData.error || JSON.stringify(scenesData));
+    try {
+      flushInspectorToState();
+      designApi?.flush?.();
+      const scenesRes = await fetch("/api/scenes", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ start: state.startId, scenes: state.scenes }),
+      });
+      let scenesData = {};
+      try {
+        scenesData = await scenesRes.json();
+      } catch {
+        scenesData = {};
+      }
+      if (!scenesRes.ok) {
+        showLog(
+          "Save failed",
+          scenesData.error ||
+            (scenesRes.status === 413
+              ? "Story is too large to save (over 8 MB). Split scenes or shrink pasted text."
+              : `Could not save scenes (HTTP ${scenesRes.status}).`)
+        );
+        return false;
+      }
+
+      const themeRes = await fetch("/api/theme", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ theme: mergeTheme(state.theme) }),
+      });
+      let themeData = {};
+      try {
+        themeData = await themeRes.json();
+      } catch {
+        themeData = {};
+      }
+      if (!themeRes.ok) {
+        showLog("Theme save failed", themeData.error || `HTTP ${themeRes.status}`);
+        return false;
+      }
+
+      clearDirty();
+      toast(`Saved ${scenesData.count} scenes + theme`);
+      return true;
+    } catch (err) {
+      // Network drop / body-too-large socket reset used to leave a silent dirty
+      // dot with no toast — beginners thought Save was broken.
+      showLog(
+        "Save failed",
+        String(err?.message || err) || "Network error — is the studio still running?"
+      );
       return false;
     }
-
-    const themeRes = await fetch("/api/theme", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ theme: mergeTheme(state.theme) }),
-    });
-    const themeData = await themeRes.json();
-    if (!themeRes.ok) {
-      showLog("Theme save failed", themeData.error || JSON.stringify(themeData));
-      return false;
-    }
-
-    clearDirty();
-    toast(`Saved ${scenesData.count} scenes + theme`);
-    return true;
   })().finally(() => {
     saveInFlight = null;
   });
   return saveInFlight;
+}
+
+/** Load the active project; on failure optionally restore a previous id. */
+async function loadProjectOrExplain(failTitle = "Couldn't open project", revertToId = null) {
+  try {
+    await loadProject();
+    return true;
+  } catch (err) {
+    const msg = String(err?.message || err);
+    if (revertToId) {
+      try {
+        await fetch("/api/settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ activeProjectId: revertToId }),
+        });
+        await loadProject();
+        showLog(
+          failTitle,
+          `${msg}\n\nStayed on ${revertToId} so Save won't write into the broken project.`
+        );
+        return false;
+      } catch (err2) {
+        showLog(failTitle, `${msg}\n\nAlso couldn't restore ${revertToId}: ${err2?.message || err2}`);
+        return false;
+      }
+    }
+    showLog(failTitle, msg);
+    return false;
+  }
 }
 
 let designApi = null;
@@ -978,6 +1034,7 @@ function ensureCliMounted() {
           if (!state.dirty) return true;
           return saveProject();
         },
+        confirmDiscard: (label) => confirmDiscardIfDirty(label),
         openPreview,
       });
       if (result.action === "clear") {
@@ -986,8 +1043,8 @@ function ensureCliMounted() {
       }
       if (result.text) cliAppend(result.text, result.ok === false ? "err" : "ok");
       if (result.action === "reload") {
-        await loadProject();
-        cliAppend("Editor reloaded.", "meta");
+        const okLoad = await loadProjectOrExplain("Couldn't reload after CLI command");
+        if (okLoad) cliAppend("Editor reloaded.", "meta");
       }
     } catch (err) {
       cliAppend(String(err.message || err), "err");
@@ -1168,47 +1225,56 @@ async function runExport(target) {
   const pinnedProjectId = state.projectId;
   setExportInFlight(
     (async () => {
-      closeExportMenu();
-      if (!(await saveProject())) return;
-      toast(`Exporting ${target}…`);
-      const dest = document.getElementById("proj-export-dest")?.value?.trim() || "";
-      const endpoint = target === "all" ? "/api/export-all" : "/api/export";
-      const body =
-        target === "all"
-          ? JSON.stringify({
-              projectId: pinnedProjectId,
-              ...(dest ? { destination: dest, saveDestination: true } : {}),
-            })
-          : JSON.stringify({
-              target,
-              projectId: pinnedProjectId,
-              ...(dest ? { destination: dest, saveDestination: true } : {}),
-            });
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body,
-      });
-      const data = await res.json();
-      let extra = "";
-      if (data.downloadUrl) {
-        extra = `\n\nDownload: ${location.origin}${data.downloadUrl}`;
-      } else if (data.folder) {
-        extra = `\n\nFolder: ${data.folder}`;
-      } else if (data.results) {
-        const links = data.results
-          .filter((r) => r.downloadUrl || r.folder)
-          .map((r) => `${r.target}: ${r.downloadUrl ? location.origin + r.downloadUrl : r.folder}`);
-        if (links.length) extra = `\n\nOutputs:\n${links.join("\n")}`;
-      }
-      showLog(data.ok ? "Export OK" : "Export failed", (data.output || data.error || "") + extra);
-      if (data.ok && data.downloadUrl) {
-        const a = document.createElement("a");
-        a.href = data.downloadUrl;
-        a.download = "";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
+      try {
+        closeExportMenu();
+        if (!(await saveProject())) return;
+        toast(`Exporting ${target}…`);
+        const dest = document.getElementById("proj-export-dest")?.value?.trim() || "";
+        const endpoint = target === "all" ? "/api/export-all" : "/api/export";
+        const body =
+          target === "all"
+            ? JSON.stringify({
+                projectId: pinnedProjectId,
+                ...(dest ? { destination: dest, saveDestination: true } : {}),
+              })
+            : JSON.stringify({
+                target,
+                projectId: pinnedProjectId,
+                ...(dest ? { destination: dest, saveDestination: true } : {}),
+              });
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body,
+        });
+        let data = {};
+        try {
+          data = await res.json();
+        } catch {
+          data = { error: `Export returned non-JSON (HTTP ${res.status})` };
+        }
+        let extra = "";
+        if (data.downloadUrl) {
+          extra = `\n\nDownload: ${location.origin}${data.downloadUrl}`;
+        } else if (data.folder) {
+          extra = `\n\nFolder: ${data.folder}`;
+        } else if (data.results) {
+          const links = data.results
+            .filter((r) => r.downloadUrl || r.folder)
+            .map((r) => `${r.target}: ${r.downloadUrl ? location.origin + r.downloadUrl : r.folder}`);
+          if (links.length) extra = `\n\nOutputs:\n${links.join("\n")}`;
+        }
+        showLog(data.ok ? "Export OK" : "Export failed", (data.output || data.error || "") + extra);
+        if (data.ok && data.downloadUrl) {
+          const a = document.createElement("a");
+          a.href = data.downloadUrl;
+          a.download = "";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        }
+      } catch (err) {
+        showLog("Export failed", String(err?.message || err));
       }
     })().finally(() => {
       setExportInFlight(null);
@@ -1357,10 +1423,11 @@ document.getElementById("btn-proj-new").addEventListener("click", async () => {
     document.getElementById("proj-new-title").value = "";
     document.getElementById("proj-new-id").value = "";
     delete document.getElementById("proj-new-id").dataset.touched;
-    await loadProject();
-    await refreshProjectsPane();
-    setWorkspaceMode("story");
-    toast(`Opened ${data.projectId}`);
+    if (await loadProjectOrExplain("Created, but couldn't open it")) {
+      await refreshProjectsPane();
+      setWorkspaceMode("story");
+      toast(`Opened ${data.projectId}`);
+    }
   }
 });
 
@@ -1371,6 +1438,7 @@ document.getElementById("btn-proj-open").addEventListener("click", async () => {
   }
   if (!(await confirmDiscardIfDirty("switch projects"))) return;
   const id = document.getElementById("proj-active").value;
+  const previousId = state.projectId;
   const res = await fetch("/api/settings", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -1381,9 +1449,12 @@ document.getElementById("btn-proj-open").addEventListener("click", async () => {
     showLog("Switch failed", data.error || JSON.stringify(data));
     return;
   }
-  toast(`Active: ${id}`);
-  await loadProject();
-  setWorkspaceMode("story");
+  if (await loadProjectOrExplain("Couldn't open project", previousId)) {
+    toast(`Active: ${id}`);
+    setWorkspaceMode("story");
+  } else {
+    await refreshProjectsPane();
+  }
 });
 
 document.getElementById("btn-proj-save-dest").addEventListener("click", async () => {
@@ -1416,6 +1487,10 @@ document.getElementById("btn-proj-save-dest").addEventListener("click", async ()
 document.getElementById("btn-proj-export-raw").addEventListener("click", () => runExport("raw"));
 
 async function runImport(body) {
+  if (exportInFlight) {
+    toast("Wait for the current export to finish");
+    return;
+  }
   if (!(await confirmDiscardIfDirty("import a project"))) return;
   toast("Importing…");
   const res = await fetch("/api/import", {
@@ -1440,16 +1515,14 @@ async function runImport(body) {
     });
     const data2 = await res2.json();
     showLog(data2.ok ? "Import OK" : "Import failed", data2.output || (data2.errors || []).join("\n") || data2.error || "");
-    if (data2.ok) {
-      await loadProject();
+    if (data2.ok && (await loadProjectOrExplain("Imported, but couldn't open it"))) {
       await refreshProjectsPane();
       setWorkspaceMode("story");
     }
     return;
   }
   showLog(data.ok ? "Import OK" : "Import failed", data.output || (data.errors || []).join("\n") || data.error || "");
-  if (data.ok) {
-    await loadProject();
+  if (data.ok && (await loadProjectOrExplain("Imported, but couldn't open it"))) {
     await refreshProjectsPane();
     setWorkspaceMode("story");
   }
