@@ -1152,6 +1152,14 @@ body.mode-design .preview-dock { display: none !important; }
   font-family: var(--display);
   font-size: 1.5rem;
 }
+.cli-kicker {
+  margin: 0 0 0.16rem;
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
 .cli-head .insp-hint { max-width: 70ch; line-height: 1.45; }
 .cli-body {
   display: grid;
@@ -1247,6 +1255,41 @@ body.mode-design .preview-dock { display: none !important; }
   grid-template-columns: auto 1fr auto;
   gap: 0.5rem;
   align-items: center;
+}
+.cli-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  min-height: 0;
+}
+.cli-suggestion {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.42rem;
+  max-width: 100%;
+  padding: 0.32rem 0.5rem;
+  border: 1px solid rgba(76, 42, 110, 0.72);
+  border-radius: 6px;
+  background: rgba(26, 15, 40, 0.72);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.cli-suggestion code {
+  color: var(--ok);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+}
+.cli-suggestion span {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+.cli-suggestion:hover,
+.cli-suggestion:focus-visible {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  outline: none;
 }
 .cli-prompt {
   font-family: var(--mono);

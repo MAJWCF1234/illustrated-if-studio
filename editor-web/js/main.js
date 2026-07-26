@@ -3,7 +3,7 @@ import { collectInbound } from "./layout.js";
 import { HistoryStack } from "./history.js";
 import { mergeTheme } from "./theme-defaults.js";
 import { mountDesignStudio } from "./design.js";
-import { runCliCommand, CLI_CHIPS } from "./cli.js";
+import { runCliCommand, CLI_CHIPS, getCliSuggestions } from "./cli.js";
 
 const state = {
   project: null,
@@ -999,6 +999,77 @@ function cliAppend(text, cls = "") {
   out.scrollTop = out.scrollHeight;
 }
 
+function validCliSceneId(rawId) {
+  const id = String(rawId || "").trim();
+  if (!id) return { ok: false, text: "Scene id required." };
+  if (id.length > 64 || /\s/.test(id) || /[<>&"'`/\\]/.test(id) || !SCENE_ID_RE.test(id)) {
+    return { ok: false, text: "Scene ids use letters, numbers, hyphens, or underscores (no spaces)." };
+  }
+  return { ok: true, id };
+}
+
+async function saveCliStoryChange(label) {
+  const saved = await saveProject();
+  return saved
+    ? { text: `${label}\n[SAVED] Your story is safe. [UNDO] is available above.`, ok: true }
+    : { text: `${label}\n[SAVE FAILED] The change is still open in the editor.`, ok: false };
+}
+
+async function cliCreateScene(rawId) {
+  const check = validCliSceneId(rawId);
+  if (!check.ok) return check;
+  const id = check.id;
+  if (state.scenes[id]) return { text: `[EXISTS] Scene: ${id}\nTry select ${id} to inspect it.`, ok: false };
+  flushInspectorToState();
+  state.scenes[id] = {
+    id,
+    sceneImage: "default.svg",
+    characterLeft: null,
+    characterRight: null,
+    speaker: null,
+    text: "Write what happens here.",
+    unlockAbility: null,
+    choices: [],
+  };
+  const base = graph.positions[state.selected] || { x: 0, y: 0 };
+  graph.positions[id] = { x: base.x + 200, y: base.y + 40 };
+  markDirty("cli-add-scene");
+  refreshDatalists();
+  selectScene(id, { skipFlush: true });
+  return saveCliStoryChange(`[CREATED] Scene: ${id}\n[NEXT] Try: say "Something happens here."`);
+}
+
+async function cliWriteScene(id, text) {
+  const scene = state.scenes[id];
+  if (!scene) return { text: `[MISSING] No scene named "${id}".\nTry: add scene ${id}`, ok: false };
+  flushInspectorToState();
+  scene.text = text;
+  markDirty("cli-write");
+  selectScene(id, { skipFlush: true });
+  return saveCliStoryChange(`[WROTE] ${id} · ${wordCount(text)} words`);
+}
+
+async function cliAddChoice(from, text, to) {
+  const source = state.scenes[from];
+  if (!source) return { text: `[MISSING] No scene named "${from}".`, ok: false };
+  if (!state.scenes[to]) return { text: `[MISSING] No scene named "${to}".\nTry: add scene ${to}`, ok: false };
+  flushInspectorToState();
+  source.choices = source.choices || [];
+  if (source.choices.some((choice) => choice.text === text && choice.next === to)) {
+    return { text: `[EXISTS] ${from} already links to ${to} with that choice.`, ok: false };
+  }
+  source.choices.push({ text, next: to });
+  markDirty("cli-choice");
+  selectScene(from, { skipFlush: true });
+  return saveCliStoryChange(`[LINKED] ${from} -> ${to}\n[CHOICE] ${text}`);
+}
+
+function cliSelectScene(id) {
+  if (!state.scenes[id]) return { text: `[MISSING] No scene named "${id}".`, ok: false };
+  selectScene(id);
+  return { text: `[FOCUS] Scene: ${id}\n[MAP] Highlighted in the Story workspace.`, ok: true };
+}
+
 function ensureCliMounted() {
   if (cliReady) return;
   cliReady = true;
@@ -1006,6 +1077,30 @@ function ensureCliMounted() {
   const form = document.getElementById("cli-form");
   const input = document.getElementById("cli-input");
   const out = document.getElementById("cli-out");
+  const suggestions = document.getElementById("cli-suggestions");
+
+  const renderSuggestions = () => {
+    const items = getCliSuggestions(input.value, Object.keys(state.scenes).sort());
+    suggestions.innerHTML = "";
+    for (const item of items) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "cli-suggestion";
+      btn.setAttribute("role", "option");
+      const code = document.createElement("code");
+      code.textContent = item.label;
+      const hint = document.createElement("span");
+      hint.textContent = item.hint;
+      btn.append(code, hint);
+      btn.addEventListener("click", () => {
+        input.value = item.value;
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+        renderSuggestions();
+      });
+      suggestions.appendChild(btn);
+    }
+  };
 
   for (const chip of CLI_CHIPS) {
     const btn = document.createElement("button");
@@ -1014,15 +1109,18 @@ function ensureCliMounted() {
     btn.textContent = chip;
     btn.addEventListener("click", () => {
       input.value = chip;
-      form.requestSubmit();
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+      renderSuggestions();
     });
     chips.appendChild(btn);
   }
 
   cliAppend(
-    "Illustrated IF Studio CLI — pick a quick command on the right, or type help to see everything.",
+    "Illustrated IF Dev Console ready.\nTry: add scene attic · say \"The rain has started.\" · choice start \"Open the door\" -> attic\nStory commands save automatically. Press Tab for a suggestion.",
     "meta"
   );
+  renderSuggestions();
 
   document.getElementById("cli-clear").addEventListener("click", () => {
     out.innerHTML = "";
@@ -1030,7 +1128,13 @@ function ensureCliMounted() {
   });
 
   input.addEventListener("keydown", (e) => {
-    if (e.key === "ArrowUp") {
+    if (e.key === "Tab") {
+      const first = suggestions.querySelector(".cli-suggestion");
+      if (first) {
+        e.preventDefault();
+        first.click();
+      }
+    } else if (e.key === "ArrowUp") {
       e.preventDefault();
       if (!cliHistory.length) return;
       cliHistoryIdx = Math.max(0, cliHistoryIdx < 0 ? cliHistory.length - 1 : cliHistoryIdx - 1);
@@ -1047,6 +1151,7 @@ function ensureCliMounted() {
       }
     }
   });
+  input.addEventListener("input", renderSuggestions);
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -1055,6 +1160,7 @@ function ensureCliMounted() {
     cliHistory.push(line);
     cliHistoryIdx = -1;
     input.value = "";
+    renderSuggestions();
     cliAppend(`if> ${line}`, "cmd");
     try {
       const result = await runCliCommand(line, {
@@ -1066,6 +1172,11 @@ function ensureCliMounted() {
         },
         confirmDiscard: (label) => confirmDiscardIfDirty(label),
         openPreview,
+        selectedSceneId: state.selected,
+        createScene: cliCreateScene,
+        writeScene: cliWriteScene,
+        addChoice: cliAddChoice,
+        selectScene: cliSelectScene,
       });
       if (result.action === "clear") {
         out.innerHTML = "";

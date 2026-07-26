@@ -2,10 +2,15 @@
  * High-level Illustrated IF Studio CLI — runs against studio APIs (no shell).
  */
 
-const HELP = `Illustrated IF Studio CLI — high-level commands
+const HELP = `Illustrated IF Studio CLI — game dev commands
 
   help                         Show this help
   clear                        Clear the terminal
+  add scene <id>               Create a new story scene
+  write <scene> <text>         Replace a scene's text
+  say <text>                   Replace the selected scene's text
+  choice <from> <text> -> <to> Add a player choice between scenes
+  select <scene>               Focus a scene in the visual editor
   status                       Studio + active project health
   projects | ls                List projects in /projects
   new [--id name] [--title T]  Create a starter project and open it
@@ -24,7 +29,7 @@ const HELP = `Illustrated IF Studio CLI — high-level commands
   preview [sceneId]            Open preview (optional start scene)
   npm                          Show equivalent npm / node CLI lines
 
-Tips: Click chips for shortcuts · ↑/↓ command history · quotes for paths with spaces
+Tips: Press Tab to fill the next command · ↑/↓ command history · quotes keep text together
 `;
 
 function tokenize(line) {
@@ -106,6 +111,52 @@ export async function runCliCommand(line, ctx) {
     case "clear":
     case "cls":
       return { text: "", ok: true, action: "clear" };
+
+    case "add": {
+      const kind = (args.shift() || "").toLowerCase();
+      if (kind !== "scene") {
+        return { text: "usage: add scene <id>", ok: false };
+      }
+      const id = args[0];
+      if (!id) return { text: "usage: add scene <id>", ok: false };
+      if (!ctx.createScene) return { text: "Scene editing is unavailable right now.", ok: false };
+      return ctx.createScene(id);
+    }
+
+    case "write": {
+      const id = args.shift();
+      const text = args.join(" ").trim();
+      if (!id || !text) return { text: "usage: write <scene> <text>", ok: false };
+      if (!ctx.writeScene) return { text: "Scene editing is unavailable right now.", ok: false };
+      return ctx.writeScene(id, text);
+    }
+
+    case "say": {
+      const text = args.join(" ").trim();
+      if (!text) return { text: "usage: say <text>", ok: false };
+      if (!ctx.writeScene) return { text: "Scene editing is unavailable right now.", ok: false };
+      return ctx.writeScene(ctx.selectedSceneId || ctx.startId, text);
+    }
+
+    case "choice": {
+      const from = args.shift();
+      const arrow = args.indexOf("->");
+      const text = arrow < 0 ? "" : args.slice(0, arrow).join(" ").trim();
+      const to = arrow < 0 ? "" : args[arrow + 1];
+      if (!from || !text || !to) {
+        return { text: "usage: choice <from> <text> -> <to>", ok: false };
+      }
+      if (!ctx.addChoice) return { text: "Scene editing is unavailable right now.", ok: false };
+      return ctx.addChoice(from, text, to);
+    }
+
+    case "select":
+    case "focus": {
+      const id = args[0];
+      if (!id) return { text: "usage: select <scene>", ok: false };
+      if (!ctx.selectScene) return { text: "Scene selection is unavailable right now.", ok: false };
+      return ctx.selectScene(id);
+    }
 
     case "status":
     case "health": {
@@ -377,24 +428,68 @@ export async function runCliCommand(line, ctx) {
 
     default:
       return {
-        text: `Unknown command: ${cmd}\nType help for the command list.`,
+        text: `Unknown command: ${cmd}\nTry: add scene <id>, say <text>, choice <from> <text> -> <to>, or help.`,
         ok: false,
       };
   }
 }
 
 export const CLI_CHIPS = [
-  "help",
-  "status",
-  "projects",
-  "new --title Demo",
-  "validate",
-  "export raw",
-  "export all",
-  "dest",
+  "add scene attic",
+  "say \"The rain has started.\"",
+  "choice start \"Open the door\" -> attic",
+  "select start",
   "scenes",
+  "validate",
   "play",
-  "npm",
+  "export site",
+  "help",
 ];
+
+const COMMAND_SUGGESTIONS = [
+  { value: "add scene ", label: "add scene <id>", hint: "make a new story beat" },
+  { value: "say ", label: "say <text>", hint: "write the selected scene" },
+  { value: "write ", label: "write <scene> <text>", hint: "write a specific scene" },
+  { value: "choice ", label: "choice <from> <text> -> <to>", hint: "link two scenes" },
+  { value: "select ", label: "select <scene>", hint: "focus it in the editor" },
+  { value: "play", label: "play", hint: "test your game" },
+  { value: "export site", label: "export site", hint: "make a static website" },
+  { value: "help", label: "help", hint: "show all commands" },
+];
+
+/**
+ * Lightweight command completion for the browser console. It deliberately
+ * suggests only real commands, so the console feels programmable without
+ * asking a new creator to memorize syntax.
+ */
+export function getCliSuggestions(line, sceneIds = []) {
+  const value = String(line || "");
+  const trimmed = value.trimStart();
+  const first = (trimmed.split(/\s+/, 1)[0] || "").toLowerCase();
+
+  if (!trimmed || !value.includes(" ")) {
+    return COMMAND_SUGGESTIONS.filter((item) => item.value.startsWith(first)).slice(0, 6);
+  }
+
+  const sceneCommand = /^(?:write|select|focus|scene)\s+([^\s]*)$/i.exec(trimmed);
+  if (sceneCommand) {
+    const prefix = sceneCommand[1].toLowerCase();
+    const command = trimmed.slice(0, trimmed.length - sceneCommand[1].length);
+    return sceneIds
+      .filter((id) => id.toLowerCase().startsWith(prefix))
+      .slice(0, 6)
+      .map((id) => ({ value: `${command}${id}${first === "write" ? " " : ""}`, label: id, hint: "scene id" }));
+  }
+
+  if (/^choice\s+[^\s]+\s+.*->\s*[^\s]*$/i.test(trimmed)) {
+    const targetPrefix = trimmed.replace(/^.*->\s*/, "").toLowerCase();
+    return sceneIds
+      .filter((id) => id.toLowerCase().startsWith(targetPrefix))
+      .slice(0, 6)
+      .map((id) => ({ value: `${trimmed.replace(/[^\s]*$/, "")}${id}`, label: id, hint: "choice destination" }));
+  }
+
+  return [];
+}
 
 export { HELP };

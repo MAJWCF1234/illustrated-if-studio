@@ -300,8 +300,9 @@
     <section class="cli-pane">
       <header class="cli-head">
         <div>
-          <h2>Studio CLI</h2>
-          <p class="insp-hint">An optional shortcut panel. Click a quick command on the right, or type one below &mdash; nothing here can break your game.</p>
+          <p class="cli-kicker">Illustrated IF</p>
+          <h2>Dev Console</h2>
+          <p class="insp-hint">Build your game with short commands. The story map updates as you work, and every story command saves automatically.</p>
         </div>
         <button type="button" class="btn" id="cli-clear">Clear</button>
       </header>
@@ -310,14 +311,15 @@
           <pre class="cli-out" id="cli-out" aria-live="polite"></pre>
           <form class="cli-input-row" id="cli-form" autocomplete="off">
             <label class="cli-prompt" for="cli-input">if&gt;</label>
-            <input id="cli-input" type="text" spellcheck="false" placeholder="Type a command, e.g. status" />
+            <input id="cli-input" type="text" spellcheck="false" autocomplete="off" aria-describedby="cli-help" placeholder="Try: add scene attic" />
             <button type="submit" class="btn primary">Run</button>
           </form>
+          <div class="cli-suggestions" id="cli-suggestions" role="listbox" aria-label="Command suggestions"></div>
         </div>
         <aside class="cli-side">
-          <h3>Quick commands</h3>
+          <h3>Command Deck</h3>
           <div class="cli-chips" id="cli-chips" role="list" aria-label="Command shortcuts"></div>
-          <p class="insp-hint">Click one to run it. Press <kbd>↑</kbd> / <kbd>↓</kbd> to reuse earlier commands, or type <code>help</code> for the full list.</p>
+          <p class="insp-hint" id="cli-help">Click an example to load it, then make it yours. Press <kbd>Tab</kbd> to complete, <kbd>↑</kbd> / <kbd>↓</kbd> for history, or type <code>help</code>.</p>
         </aside>
       </div>
     </section>
