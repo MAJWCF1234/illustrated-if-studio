@@ -154,6 +154,56 @@ Compress-Archive -Path (Join-Path '${staging.replace(/'/g, "''")}' '*') -Destina
   if (r.status !== 0) throw new Error(`tar zip failed: ${r.stderr || r.stdout}`);
 }
 
+function listZipEntries(zipPath) {
+  if (process.platform === "win32") {
+    const ps = `
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+[IO.Compression.ZipFile]::OpenRead('${zipPath.replace(/'/g, "''")}').Entries | ForEach-Object { $_.FullName }
+`;
+    const r = spawnSync("powershell", ["-NoProfile", "-Command", ps], { encoding: "utf8" });
+    if (r.status !== 0) throw new Error(`Could not inspect handoff zip: ${r.stderr || r.stdout}`);
+    return String(r.stdout || "")
+      .split(/\r?\n/)
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+  }
+  const r = spawnSync("tar", ["-tf", zipPath], { encoding: "utf8" });
+  if (r.status !== 0) throw new Error(`Could not inspect handoff zip: ${r.stderr || r.stdout}`);
+  return String(r.stdout || "")
+    .split(/\r?\n/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+/** Verify the delivered archive itself, not just the folder we zipped. */
+function verifyHandoffZip(zipPath, opts) {
+  const entries = new Set(listZipEntries(zipPath).map((entry) => entry.replaceAll("\\", "/")));
+  const required = [
+    "Illustrated IF Studio.exe",
+    "README.txt",
+    "tools/launch-studio.ps1",
+    "projects/sample-project/project.json",
+  ];
+  if (opts.includeNodeModules) required.push("node_modules/electron/dist/electron.exe");
+
+  const missing = required.filter((entry) => !entries.has(entry));
+  if (missing.length) throw new Error(`Handoff zip is missing: ${missing.join(", ")}`);
+  if (entries.has("studio-settings.json")) throw new Error("studio-settings.json leaked into handoff zip");
+  if ([...entries].some((entry) => entry.startsWith("dist/"))) {
+    throw new Error("dist/ leaked into handoff zip");
+  }
+
+  if (!opts.allProjects) {
+    const shipped = new Set();
+    for (const entry of entries) {
+      const match = /^projects\/([^/]+)\//.exec(entry);
+      if (match) shipped.add(match[1]);
+    }
+    const extra = [...shipped].filter((name) => !opts.projects.includes(name));
+    if (extra.length) throw new Error(`Projects leaked into handoff zip: ${extra.join(", ")}`);
+  }
+}
+
 function main() {
   const opts = parseArgs(process.argv.slice(2));
   if (opts.help) {
@@ -226,9 +276,11 @@ Options:
 
   console.log("Zipping…");
   zipStaging(staging, outZip);
+  verifyHandoffZip(outZip, opts);
 
   const mb = (fs.statSync(outZip).size / (1024 * 1024)).toFixed(1);
   console.log(`\nDone: ${outZip} (${mb} MB)`);
+  console.log("Verified: launcher, offline runtime, sample project, and private-file exclusions.");
   console.log("Give him the zip + README.txt tip: Unzip → double-click Illustrated IF Studio.");
   console.log("(Staging folder left at dist/_handoff-staging for inspection; safe to delete.)");
 }
