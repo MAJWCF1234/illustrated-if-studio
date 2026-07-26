@@ -311,12 +311,26 @@ function renderList() {
 
 function selectScene(id, opts = {}) {
   if (!state.scenes[id]) return;
-  if (!opts.skipFlush) flushInspectorToState();
+  if (!opts.skipFlush) {
+    // Commit a typed-but-unblurred scene name before switching — pointerdown
+    // selects before the #f-id change event, which used to silently drop renames.
+    commitPendingSceneRename();
+    flushInspectorToState();
+  }
+  if (!state.scenes[id]) return;
   state.selected = id;
   graph.select(id);
   graph.draw(state.scenes, state.startId);
   renderList();
   fillInspector();
+}
+
+/** Apply #f-id when it differs from the selected scene (Save / Preview / switch). */
+function commitPendingSceneRename() {
+  if (!state.selected || !els.fId || els.form?.hidden) return;
+  const typed = String(els.fId.value || "").trim();
+  if (!typed || typed === state.selected) return;
+  renameSelectedScene(typed);
 }
 
 function wordCount(text) {
@@ -864,6 +878,7 @@ async function saveProject() {
   if (saveInFlight) return saveInFlight;
   saveInFlight = (async () => {
     try {
+      commitPendingSceneRename();
       flushInspectorToState();
       designApi?.flush?.();
       const scenesRes = await fetch("/api/scenes", {
@@ -1115,6 +1130,7 @@ async function openPreview(sceneId) {
   els.previewDock.hidden = false;
   // Design font/number fields may have typed values not yet in state.theme.
   designApi?.flush?.();
+  commitPendingSceneRename();
   const ok = state.dirty ? await saveProject() : true;
   if (!ok) return;
   els.previewFrame.src = previewUrl(sceneId);
@@ -1154,10 +1170,17 @@ document.getElementById("btn-add").addEventListener("click", () => {
   const base = graph.positions[state.selected] || { x: 0, y: 0 };
   graph.positions[id] = { x: base.x + 200, y: base.y + 40 };
   markDirty("add-scene");
+  // A filter that hides the new id made "+ Scene" look like a no-op and left
+  // orphans only visible after Save. Clear the filter so the scene stays in view.
+  if (els.filter?.value) {
+    els.filter.value = "";
+    toast(`Added ${id} (cleared scene filter so you can see it)`);
+  } else {
+    toast(`Added ${id}`);
+  }
   renderList();
   selectScene(id);
   setInspTab("story");
-  toast(`Added ${id}`);
 });
 
 document.getElementById("btn-delete").addEventListener("click", () => {
@@ -1330,17 +1353,20 @@ document.getElementById("btn-redo").addEventListener("click", () => {
     toast("Redo");
   }
 });
+function closePreviewDock() {
+  els.previewDock.hidden = true;
+  // Unload the iframe so BGM / timers cannot keep running while the dock is hidden.
+  els.previewFrame.src = "about:blank";
+}
+
 document.getElementById("btn-preview-toggle").addEventListener("click", () => {
   if (els.previewDock.hidden) openPreview(state.selected || state.startId);
-  else els.previewDock.hidden = true;
+  else closePreviewDock();
 });
 document.getElementById("btn-preview-here").addEventListener("click", () => openPreview(state.selected));
 document.getElementById("btn-preview-start").addEventListener("click", () => openPreview(state.startId));
 document.getElementById("btn-preview-reload").addEventListener("click", () => openPreview(state.selected || state.startId));
-document.getElementById("btn-preview-close").addEventListener("click", () => {
-  els.previewDock.hidden = true;
-  els.previewFrame.src = "about:blank";
-});
+document.getElementById("btn-preview-close").addEventListener("click", () => closePreviewDock());
 
 els.filter.addEventListener("input", renderList);
 

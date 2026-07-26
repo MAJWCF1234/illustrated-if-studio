@@ -244,7 +244,9 @@ export async function runCliCommand(line, ctx) {
       const endpoint = target === "all" ? "/api/export-all" : "/api/export";
       const body =
         target === "all"
-          ? {}
+          ? {
+              ...(dest ? { destination: dest, saveDestination: true } : {}),
+            }
           : {
               target,
               ...(target === "raw" && dest

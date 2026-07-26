@@ -518,6 +518,11 @@ export class NovelEngine {
       return;
     }
     try {
+      const existing = await loadSlot(this.project.id, slot);
+      if (!existing.empty && existing.save && !existing.corrupt) {
+        const prior = existing.save.label || existing.save.playerName || `slot ${slot}`;
+        if (!confirm(`Overwrite save slot ${slot} (“${prior}”)?`)) return;
+      }
       const suggested = (this.state.playerName ? `${this.state.playerName} — ` : "") + (this.state.currentScene || `Slot ${slot}`);
       const label = (window.prompt(`Label for slot ${slot}:`, suggested) || `Slot ${slot}`).trim() || `Slot ${slot}`;
       const snap = snapshotFromState(this.state, { label });
