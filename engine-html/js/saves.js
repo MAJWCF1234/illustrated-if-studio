@@ -47,6 +47,9 @@ function lsKey(projectId, slot) {
 let apiProbe = null;
 
 async function apiAvailable() {
+  // Static hosts such as Neocities have no Studio API. The static export sets
+  // this before boot so browser-only saves do not create a needless 404 probe.
+  if (globalThis.__IF_STATIC_SITE__) return false;
   if (apiProbe === null) {
     apiProbe = (async () => {
       try {

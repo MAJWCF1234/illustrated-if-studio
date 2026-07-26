@@ -120,6 +120,23 @@ try {
     bug("raw export folder unexpected: " + rawExport.body?.folder);
   }
 
+  // Static-host export: upload this folder to Neocities/GitHub Pages as-is.
+  const siteDest = path.join(studioRoot, "dist", "electron-smoke-site");
+  const staticExport = await win.evaluate(async (destination) => {
+    const r = await fetch("/api/export", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target: "site", destination, saveDestination: false }),
+    });
+    return { status: r.status, body: await r.json() };
+  }, siteDest);
+  console.log("Export static site:", staticExport.body?.ok, staticExport.body?.folder);
+  if (!staticExport.body?.ok) bug("static site export failed: " + (staticExport.body?.error || staticExport.body?.output || ""));
+  if (!fs.existsSync(path.join(staticExport.body?.folder || "", "index.html"))) {
+    bug("static site export missing index.html");
+  }
+  if (staticExport.body?.downloadUrl) bug("static site export should report its folder, not a ZIP download");
+
   // HTML export
   const htmlExport = await win.evaluate(async () => {
     const r = await fetch("/api/export", {
@@ -163,6 +180,10 @@ try {
   const title = await win.locator("#project-title").innerText();
   console.log("Editor title:", title.trim());
   if (!/Sample Project/i.test(title)) bug("Editor title wrong: " + title);
+  const staticExportLabel = await win.locator('[data-export="site"]').innerText();
+  if (!/static website.*neocities/i.test(staticExportLabel)) {
+    bug("Static website export option missing or unclear: " + staticExportLabel);
+  }
 
   // Player route reachable from Electron origin
   const playerProbe = await win.evaluate(async () => {
@@ -184,6 +205,7 @@ try {
   // clean smoke export folder
   try {
     fs.rmSync(path.join(studioRoot, "dist", "electron-smoke-raw"), { recursive: true, force: true });
+    fs.rmSync(path.join(studioRoot, "dist", "electron-smoke-site"), { recursive: true, force: true });
   } catch {
     /* ignore */
   }

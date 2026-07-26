@@ -10,12 +10,12 @@ const HELP = `Illustrated IF Studio CLI — high-level commands
   projects | ls                List projects in /projects
   new [--id name] [--title T]  Create a starter project and open it
   use <id>                     Switch active project and reload editor
-  dest [path]                  Get or set export destination folder (HTML/Python/C++/raw)
+  dest [path]                  Get or set export destination folder (HTML/site/Python/C++/raw)
   validate                     Validate the active project
   save                         Save unsaved scene edits (if any)
   scenes                       Scene count + start id (saves dirty edits first)
   scene <id>                   Peek a scene (text / choices; saves dirty edits first)
-  export <html|python|cpp|raw|all> [--dest path]
+  export <html|site|python|cpp|raw|all> [--dest path]
                                Build packages (raw uses dest)
   import folder <path> [--id name] [--overwrite]
   import html <path> [--id name] [--title "Title"] [--overwrite]
@@ -238,8 +238,8 @@ export async function runCliCommand(line, ctx) {
       }
       const dest = takeGreedyFlag(args, "--dest");
       const target = (args[0] || "").toLowerCase();
-      if (!["html", "python", "cpp", "raw", "all"].includes(target)) {
-        return { text: "usage: export <html|python|cpp|raw|all> [--dest path]", ok: false };
+      if (!["html", "site", "python", "cpp", "raw", "all"].includes(target)) {
+        return { text: "usage: export <html|site|python|cpp|raw|all> [--dest path]", ok: false };
       }
       const endpoint = target === "all" ? "/api/export-all" : "/api/export";
       const body =
@@ -367,7 +367,7 @@ export async function runCliCommand(line, ctx) {
           "Host shell equivalents (run in studio folder):",
           "  npm start",
           "  npm run playtest",
-          "  npm run export:html | export:python | export:cpp | export:raw | export:all",
+          "  npm run export:html | export:site | export:python | export:cpp | export:raw | export:all",
           "  node server/cli.mjs export raw [projectDir]",
           "",
           "This CLI tab talks to the running studio API — no Node spawn from the browser.",

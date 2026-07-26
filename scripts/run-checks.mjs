@@ -18,6 +18,7 @@ run(process.execPath, ["scripts/check-windows-scripts.mjs"]);
 run(process.execPath, ["scripts/parity-test.mjs"]);
 run(process.execPath, ["scripts/conditions-parity-smoke.mjs"]);
 run(process.execPath, ["scripts/export-destination-smoke.mjs"]);
+run(process.execPath, ["scripts/static-site-export-smoke.mjs"]);
 run(process.execPath, ["scripts/saves-hardening-smoke.mjs"]);
 
 // Windows per-user installs are missing from PATH whenever Python was installed

@@ -13,6 +13,17 @@ export async function initProjectBase() {
 }
 `;
 
+/** Static-host build for Neocities, GitHub Pages, and similar web hosts. */
+export const STATIC_SITE_CONFIG_JS = `/** Static website build — project shipped beside the player. */
+globalThis.__IF_STATIC_SITE__ = true;
+export let PROJECT_BASE = new URL("../project/", import.meta.url);
+
+/** Static hosts serve the files directly; there is no studio API to ask. */
+export async function initProjectBase() {
+  return PROJECT_BASE;
+}
+`;
+
 /**
  * Tiny static server shipped with HTML exports.
  *

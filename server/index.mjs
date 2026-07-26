@@ -14,6 +14,7 @@ import {
   listProjects,
 } from "./lib/settings.mjs";
 import { exportHtml } from "./exporters/html.mjs";
+import { exportStaticHtml } from "./exporters/static-html.mjs";
 import { exportPython } from "./exporters/python.mjs";
 import { exportCpp } from "./exporters/cpp.mjs";
 import { exportRawProject, importProjectFolder } from "./exporters/raw.mjs";
@@ -204,6 +205,7 @@ function runExport(target, opts = {}) {
   const exportOut = resolveOutRoot(opts.destination);
   const args = { studioRoot, projectDir, outRoot: exportOut };
   if (target === "html") return exportHtml(args);
+  if (target === "site") return exportStaticHtml(args);
   if (target === "python") return exportPython(args);
   if (target === "cpp") return exportCpp(args);
   if (target === "raw") {
@@ -274,7 +276,7 @@ async function handleApi(req, res, urlPath, searchParams) {
       studioRoot,
       projectDir,
       activeProjectId: getActiveProjectId(),
-      exports: ["html", "python", "cpp", "raw"],
+      exports: ["html", "site", "python", "cpp", "raw"],
     });
   }
 
@@ -627,7 +629,7 @@ async function handleApi(req, res, urlPath, searchParams) {
         if (err.status === 400) return sendJson(res, 400, { ok: false, error: err.message });
         // empty body is fine
       }
-      const results = ["html", "python", "cpp", "raw"].map((t) =>
+      const results = ["html", "site", "python", "cpp", "raw"].map((t) =>
         formatExportResult(runExport(t, { destination, projectDir: exportProjectDir }))
       );
       const ok = results.every((r) => r.ok);

@@ -144,6 +144,7 @@ From the editor **Export** menu, or CLI:
 
 ```bash
 npm run export:html     # dist/*-web.zip
+npm run export:site     # dist/*-site/ upload-ready static website
 npm run export:python   # dist/*-python.zip
 npm run export:cpp      # dist/*-cpp.zip
 npm run export:all
@@ -165,6 +166,13 @@ Each Windows zip includes:
 Studio itself: the friendly launcher installs Node if missing, and may optionally offer
 Python/C++ sharing tools once. Manual: `tools\emergency\SETUP-ADMIN.bat` /
 `SETUP-EXPORT-TOOLS.bat`.
+
+### Static web hosting (Neocities)
+
+Choose **Export → Static website (Neocities)** to create `dist/<game>-site/`.
+Upload everything inside that folder to your site: `index.html`, `css/`, `js/`, and
+`project/`. It is a normal static website and needs no Node.js, server process, or
+terminal on the host. Browser saves remain on each player's own device.
 
 ## Design (creator UX)
 

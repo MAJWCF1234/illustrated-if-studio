@@ -2,6 +2,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { exportHtml } from "./exporters/html.mjs";
+import { exportStaticHtml } from "./exporters/static-html.mjs";
 import { exportPython } from "./exporters/python.mjs";
 import { exportCpp } from "./exporters/cpp.mjs";
 import { exportRawProject } from "./exporters/raw.mjs";
@@ -20,13 +21,14 @@ const projectDir = path.resolve(
     path.join(studioRoot, "projects", settings.activeProjectId || "sample-project")
 );
 
-const known = ["html", "python", "cpp", "raw", "all"];
+const known = ["html", "site", "python", "cpp", "raw", "all"];
 if (cmd !== "export" || !known.includes(target)) {
   console.log(`Usage:
-  node server/cli.mjs export <html|python|cpp|raw|all> [projectDir]
+  node server/cli.mjs export <html|site|python|cpp|raw|all> [projectDir]
 
 Examples:
   npm run export:html
+  npm run export:site
   npm run export:python
   npm run export:cpp
   npm run export:raw
@@ -37,6 +39,7 @@ Examples:
 
 const exporters = {
   html: exportHtml,
+  site: exportStaticHtml,
   python: exportPython,
   cpp: exportCpp,
   raw: ({ studioRoot, projectDir }) =>
@@ -46,7 +49,7 @@ const exporters = {
     }),
 };
 
-const targets = target === "all" ? ["html", "python", "cpp", "raw"] : [target];
+const targets = target === "all" ? ["html", "site", "python", "cpp", "raw"] : [target];
 let failed = false;
 
 for (const t of targets) {
