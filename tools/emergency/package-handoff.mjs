@@ -60,6 +60,8 @@ const SKIP_NAMES = new Set([
   ".pytest_cache",
   "node_modules", // handled separately
   "studio-settings.json",
+  ".gitattributes",
+  ".gitignore",
   ".DS_Store",
   "Thumbs.db",
   "agent-transcripts",

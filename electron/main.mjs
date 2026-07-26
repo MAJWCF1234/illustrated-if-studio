@@ -5,6 +5,7 @@
  */
 import { app, BrowserWindow, shell, Menu, dialog } from "electron";
 import { spawn, spawnSync } from "node:child_process";
+import crypto from "node:crypto";
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
@@ -12,9 +13,9 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const studioRoot = path.resolve(__dirname, "..");
-const port = Number(process.env.PORT) || 8787;
-const baseUrl = process.env.STUDIO_URL || `http://127.0.0.1:${port}`;
-const editorUrl = `${baseUrl.replace(/\/$/, "")}/editor-web/`;
+const preferredPort = Number(process.env.PORT) || 8787;
+let port = preferredPort;
+let baseUrl = process.env.STUDIO_URL || `http://127.0.0.1:${port}`;
 const headless = process.env.IF_ELECTRON_HEADLESS === "1" || process.argv.includes("--headless");
 const reuseServer = process.env.IF_REUSE_SERVER === "1" || process.argv.includes("--reuse-server");
 const quitAfterMs = Number(process.env.IF_ELECTRON_QUIT_MS || 0);
@@ -22,6 +23,41 @@ const quitAfterMs = Number(process.env.IF_ELECTRON_QUIT_MS || 0);
 let serverProc = null;
 let mainWindow = null;
 let ownedServer = false;
+
+function editorUrl() {
+  return `${baseUrl.replace(/\/$/, "")}/editor-web/`;
+}
+
+function setPort(next) {
+  port = next;
+  if (!process.env.STUDIO_URL) baseUrl = `http://127.0.0.1:${port}`;
+}
+
+/** Isolate lock + cache per studio folder so a handoff zip and a dev checkout can coexist. */
+function configureUserData() {
+  if (process.env.IF_ELECTRON_USER_DATA) {
+    app.setPath("userData", process.env.IF_ELECTRON_USER_DATA);
+    return;
+  }
+  const digest = crypto.createHash("sha1").update(studioRoot.toLowerCase()).digest("hex").slice(0, 12);
+  app.setPath("userData", path.join(app.getPath("appData"), `illustrated-if-studio-${digest}`));
+}
+
+/** True when /api/health belongs to THIS studio folder (not another copy on the same port). */
+function isOurStudio(health) {
+  if (!health || typeof health !== "object") return false;
+  if (health.studioRoot) {
+    try {
+      return path.resolve(String(health.studioRoot)) === studioRoot;
+    } catch {
+      return false;
+    }
+  }
+  const projectDir = health.projectDir ? path.resolve(String(health.projectDir)) : "";
+  if (!projectDir) return false;
+  const root = studioRoot.endsWith(path.sep) ? studioRoot : studioRoot + path.sep;
+  return projectDir === studioRoot || projectDir.startsWith(root);
+}
 
 function log(...args) {
   console.log("[electron]", ...args);
@@ -85,8 +121,9 @@ function probeHealth(timeoutMs = 8000) {
   });
 }
 
-function startServer() {
+function startServerOnPort(targetPort) {
   return new Promise((resolve, reject) => {
+    setPort(targetPort);
     const entry = path.join(studioRoot, "server", "index.mjs");
     const nodeBin = resolveNodeBinary();
     const env = { ...process.env, PORT: String(port) };
@@ -102,11 +139,28 @@ function startServer() {
       windowsHide: true,
     });
     ownedServer = true;
+    let settled = false;
+    const failOnce = (err) => {
+      if (settled) return;
+      settled = true;
+      stopServer();
+      reject(err);
+    };
     serverProc.stdout.on("data", (d) => process.stdout.write(d));
-    serverProc.stderr.on("data", (d) => process.stderr.write(d));
+    serverProc.stderr.on("data", (d) => {
+      const text = String(d);
+      process.stderr.write(d);
+      if (/EADDRINUSE|already in use/i.test(text)) {
+        failOnce(new Error(`Port ${port} is already in use`));
+      }
+    });
     serverProc.on("exit", (code, signal) => {
       log("server exited", code, signal || "");
       serverProc = null;
+      if (!settled && ownedServer && !mainWindow) {
+        failOnce(new Error(`Studio server exited early (code ${code ?? "n/a"})`));
+        return;
+      }
       if (mainWindow && !mainWindow.isDestroyed() && ownedServer) {
         if (!headless) {
           dialog
@@ -127,12 +181,35 @@ function startServer() {
         }
       }
     });
-    serverProc.on("error", reject);
-    probeHealth(20000).then(resolve).catch((err) => {
-      stopServer();
-      reject(err);
-    });
+    serverProc.on("error", failOnce);
+    probeHealth(20000)
+      .then((health) => {
+        if (settled) return;
+        if (!isOurStudio(health)) {
+          failOnce(new Error("Studio server started but reported a different folder"));
+          return;
+        }
+        settled = true;
+        resolve(health);
+      })
+      .catch(failOnce);
   });
+}
+
+async function startServer() {
+  const ports = [];
+  for (let i = 0; i < 10; i++) ports.push(preferredPort + i);
+  let lastErr = null;
+  for (const candidate of ports) {
+    try {
+      return await startServerOnPort(candidate);
+    } catch (err) {
+      lastErr = err;
+      log("port", candidate, "failed:", String(err?.message || err));
+      stopServer();
+    }
+  }
+  throw lastErr || new Error("Could not start studio server");
 }
 
 function stopServer() {
@@ -179,7 +256,7 @@ function buildMenu() {
         },
         {
           label: "Open in Browser",
-          click: () => shell.openExternal(editorUrl),
+          click: () => shell.openExternal(editorUrl()),
         },
         { type: "separator" },
         isMac ? { role: "close" } : { role: "quit" },
@@ -220,8 +297,9 @@ async function createWindow(health) {
     mainWindow = null;
   });
 
-  log("loading", editorUrl);
-  await mainWindow.loadURL(editorUrl);
+  const url = editorUrl();
+  log("loading", url);
+  await mainWindow.loadURL(url);
 
   if (!headless) mainWindow.show();
 
@@ -235,12 +313,14 @@ async function createWindow(health) {
   );
 }
 
+configureUserData();
+
 const gotLock =
   process.env.IF_ELECTRON_ALLOW_MULTI === "1" || process.argv.includes("--allow-multi")
     ? true
     : app.requestSingleInstanceLock();
 if (!gotLock) {
-  log("another instance is running — quitting");
+  log("another instance of this studio folder is running — quitting");
   app.exit(0);
 } else {
   app.on("second-instance", () => {
@@ -261,17 +341,27 @@ if (!gotLock) {
       if (reuseServer) {
         log("reusing existing server at", baseUrl);
         health = await probeHealth(5000);
+        if (!isOurStudio(health)) {
+          throw new Error(
+            "IF_REUSE_SERVER is set, but the server on this port belongs to a different studio folder."
+          );
+        }
         ownedServer = false;
       } else {
         try {
           health = await probeHealth(600);
-          log("server already up — reusing", health.activeProjectId || "");
-          ownedServer = false;
+          if (isOurStudio(health)) {
+            log("server already up — reusing", health.activeProjectId || "");
+            ownedServer = false;
+          } else {
+            log("foreign studio on port", port, "— starting our own");
+            health = await startServer();
+          }
         } catch {
           health = await startServer();
         }
       }
-      log("health ok", health.name || "studio", health.activeProjectId || "");
+      log("health ok", health.name || "studio", health.activeProjectId || "", `PORT=${port}`);
       await createWindow(health);
 
       if (quitAfterMs > 0) {

@@ -163,21 +163,99 @@ namespace IllustratedIf
             return list.ToArray();
         }
 
-        /// <summary>True when the studio backend answers on the expected port.</summary>
+        /// <summary>True when THIS copy's studio backend answers (preferred port, or a nearby fallback).</summary>
         public static bool StudioAnswering()
+        {
+            // Electron may hop to preferredPort+N when something else holds 8787.
+            for (int delta = 0; delta < 10; delta++)
+            {
+                if (ProbePort(Port + delta)) return true;
+            }
+            return false;
+        }
+
+        static bool ProbePort(int port)
         {
             try
             {
-                var req = (HttpWebRequest)WebRequest.Create("http://127.0.0.1:" + Port + "/api/health");
-                req.Timeout = 1200;
-                req.ReadWriteTimeout = 1200;
+                var req = (HttpWebRequest)WebRequest.Create("http://127.0.0.1:" + port + "/api/health");
+                req.Timeout = 900;
+                req.ReadWriteTimeout = 900;
                 req.Method = "GET";
                 using (var res = (HttpWebResponse)req.GetResponse())
                 {
-                    return res.StatusCode == HttpStatusCode.OK;
+                    if (res.StatusCode != HttpStatusCode.OK) return false;
+                    string body;
+                    using (var reader = new StreamReader(res.GetResponseStream(), Encoding.UTF8))
+                        body = reader.ReadToEnd();
+                    return HealthBelongsToUs(body);
                 }
             }
             catch { return false; }
+        }
+
+        /// <summary>
+        /// Accept health JSON only when it clearly refers to this studio folder.
+        /// Prevents a different unzipped copy (or a checkout) on the same port
+        /// from counting as "we're up" for the splash screen.
+        /// </summary>
+        static bool HealthBelongsToUs(string body)
+        {
+            if (string.IsNullOrEmpty(body) || string.IsNullOrEmpty(Root)) return false;
+            string rootNorm = Root.TrimEnd('\\', '/').Replace('/', '\\');
+
+            string studio = JsonStringValue(body, "studioRoot");
+            if (studio != null)
+            {
+                studio = studio.TrimEnd('\\', '/').Replace('/', '\\');
+                return string.Equals(studio, rootNorm, StringComparison.OrdinalIgnoreCase);
+            }
+
+            string project = JsonStringValue(body, "projectDir");
+            if (project != null)
+            {
+                project = project.Replace('/', '\\');
+                return project.StartsWith(rootNorm + "\\", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(project, rootNorm, StringComparison.OrdinalIgnoreCase);
+            }
+
+            // Older servers: require our root path to appear in the payload.
+            string escaped = rootNorm.Replace("\\", "\\\\");
+            return IndexOfIgnoreCase(body, escaped) >= 0 || IndexOfIgnoreCase(body, rootNorm) >= 0;
+        }
+
+        static int IndexOfIgnoreCase(string haystack, string needle)
+        {
+            return haystack.IndexOf(needle, StringComparison.OrdinalIgnoreCase);
+        }
+
+        static string JsonStringValue(string json, string key)
+        {
+            string pattern = "\"" + key + "\"";
+            int keyIndex = IndexOfIgnoreCase(json, pattern);
+            if (keyIndex < 0) return null;
+            int colon = json.IndexOf(':', keyIndex + pattern.Length);
+            if (colon < 0) return null;
+            int first = json.IndexOf('"', colon + 1);
+            if (first < 0) return null;
+            var sb = new StringBuilder();
+            for (int i = first + 1; i < json.Length; i++)
+            {
+                char c = json[i];
+                if (c == '\\' && i + 1 < json.Length)
+                {
+                    char n = json[++i];
+                    if (n == '"' || n == '\\' || n == '/') sb.Append(n);
+                    else if (n == 'n') sb.Append('\n');
+                    else if (n == 'r') sb.Append('\r');
+                    else if (n == 't') sb.Append('\t');
+                    else sb.Append(n);
+                    continue;
+                }
+                if (c == '"') break;
+                sb.Append(c);
+            }
+            return sb.ToString();
         }
 
         /// <summary>Starts the Electron studio with no console window. Returns the process.</summary>
