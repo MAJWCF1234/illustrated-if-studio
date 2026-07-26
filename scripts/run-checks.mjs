@@ -17,7 +17,14 @@ run(process.execPath, ["scripts/validate-project.mjs", "projects/sample-project"
 run(process.execPath, ["scripts/check-windows-scripts.mjs"]);
 run(process.execPath, ["scripts/parity-test.mjs"]);
 run(process.execPath, ["scripts/conditions-parity-smoke.mjs"]);
-run(process.execPath, ["scripts/export-destination-smoke.mjs"]);
+// Destination safety deliberately follows Windows path semantics. Run it on a
+// Windows runner; treating C:\\Windows as a POSIX relative path would make the
+// Linux job report a false failure instead of testing the real guard.
+if (process.platform === "win32") {
+  run(process.execPath, ["scripts/export-destination-smoke.mjs"]);
+} else {
+  console.log("\n> export destination safety (skipped: covered by Windows CI)");
+}
 run(process.execPath, ["scripts/static-site-export-smoke.mjs"]);
 run(process.execPath, ["scripts/saves-hardening-smoke.mjs"]);
 

@@ -13,12 +13,29 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: npm
+      - name: Install Node dependencies
+        run: npm ci
       - name: Validate + JS parity
         run: npm run check
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
       - name: Smoke exports (HTML/Python/C++ packages)
         run: npm run smoke
       - name: C++ export package shape
         run: node scripts/cpp-parity-smoke.mjs
+
+  windows-safety:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Export destination safety
+        run: node scripts/export-destination-smoke.mjs
+      - name: Windows launcher scripts
+        run: node scripts/check-windows-scripts.mjs
 
   cpp-build:
     runs-on: ubuntu-latest
@@ -28,7 +45,7 @@ jobs:
         with:
           node-version: "20"
       - name: Install build tools
-        run: sudo apt-get update && sudo apt-get install -y cmake g++ git
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ git libx11-dev libxrandr-dev libxi-dev libxinerama-dev libxcursor-dev libgl1-mesa-dev libasound2-dev
       - name: Export, build, run parity fixture
         env:
           IF_CPP_FORCE_BUILD: "1"
