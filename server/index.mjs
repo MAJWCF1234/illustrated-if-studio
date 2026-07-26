@@ -156,6 +156,7 @@ async function handleApi(req, res, urlPath, searchParams) {
     return sendJson(res, 200, {
       ok: true,
       name: "illustrated-if-studio",
+      studioRoot,
       projectDir,
       activeProjectId: getActiveProjectId(),
       exports: ["html", "python", "cpp", "raw"],
@@ -547,7 +548,13 @@ server.on("error", (err) => {
   process.exit(1);
 });
 
-server.listen(port, () => {
+// Loopback only. Binding every interface makes Windows Firewall pop "allow this app
+// on public networks?" the first time someone unzips the studio, which is exactly the
+// kind of prompt this launcher exists to avoid — and the studio has no business being
+// reachable from the LAN. Set IF_HOST to override.
+const host = process.env.IF_HOST || "127.0.0.1";
+
+server.listen(port, host, () => {
   console.log(`Illustrated IF Studio`);
   console.log(`  Editor  http://127.0.0.1:${port}/editor-web/`);
   console.log(`  Player  http://127.0.0.1:${port}/engine-html/`);
