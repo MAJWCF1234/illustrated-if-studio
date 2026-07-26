@@ -19,14 +19,15 @@ run(process.execPath, ["scripts/parity-test.mjs"]);
 run(process.execPath, ["scripts/conditions-parity-smoke.mjs"]);
 run(process.execPath, ["scripts/export-destination-smoke.mjs"]);
 
-const pyCandidates = [
-  process.env.PYTHON,
-  "py",
-  "python3",
-  "python",
-  String.raw`C:\Users\majwc\AppData\Local\Programs\Python\Python311\python.exe`,
-  String.raw`C:\Users\majwc\AppData\Local\Programs\Python\Python39\python.exe`,
-].filter(Boolean);
+// Windows per-user installs are missing from PATH whenever Python was installed
+// without ticking "Add python.exe to PATH", so look where they land by default.
+const windowsUserPythons = process.env.LOCALAPPDATA
+  ? ["Python313", "Python312", "Python311", "Python310", "Python39"].map((v) =>
+      path.join(process.env.LOCALAPPDATA, "Programs", "Python", v, "python.exe")
+    )
+  : [];
+
+const pyCandidates = [process.env.PYTHON, "py", "python3", "python", ...windowsUserPythons].filter(Boolean);
 
 let pyOk = false;
 for (const py of pyCandidates) {

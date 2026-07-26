@@ -123,7 +123,14 @@ fs.mkdirSync(exportDest, { recursive: true });
 
 must(fs.existsSync(path.join(handoffRoot, "Illustrated IF Studio.exe")), "launcher exe present");
 must(fs.existsSync(path.join(handoffRoot, "projects", "sample-project")), "sample-project present");
-must(!fs.existsSync(path.join(handoffRoot, "projects", "finding-secrets")), "finding-secrets excluded from handoff");
+const shippedProjects = fs
+  .readdirSync(path.join(handoffRoot, "projects"), { withFileTypes: true })
+  .filter((e) => e.isDirectory())
+  .map((e) => e.name);
+must(
+  shippedProjects.every((name) => name === "sample-project"),
+  `handoff ships only the sample project (found: ${shippedProjects.join(", ")})`
+);
 must(/\s/.test(handoffRoot), "handoff path contains a space");
 
 const electronCli = path.join(handoffRoot, "node_modules", "electron", "cli.js");

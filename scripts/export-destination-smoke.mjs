@@ -17,7 +17,7 @@ const allow = [
   path.join(home, "Downloads"),
   home,
   "D:\\illustrated-if-studio\\dist",
-  "D:\\Games\\finding-secrets",
+  "D:\\Games\\my-story",
   "E:\\",
 ].filter(Boolean);
 

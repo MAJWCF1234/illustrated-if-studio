@@ -80,12 +80,15 @@ npm run build:python-exe -- --skip-build   # export Python package (+ BUILD-EXE.
 ## Send it to someone who can't code (hand-off zip)
 
 The recipient never has to touch a terminal, winget, `git`, or `npm`. Build the zip for
-them (don't Explorer-zip by hand — that can leak `finding-secrets` / `studio-settings.json`):
+them (don't Explorer-zip by hand — that can leak your own stories and
+`studio-settings.json`):
 
 ```bash
 npm run package:handoff
-# optional: include your private game
-npm run package:handoff -- --include-finding-secrets
+# also send specific stories of your own:
+npm run package:handoff -- --projects sample-project,my-story
+# every project in projects/:
+npm run package:handoff -- --all-projects
 # smaller zip (first launch downloads Electron):
 npm run package:handoff -- --no-node-modules
 ```
@@ -124,7 +127,7 @@ live out of sight in **`tools/emergency/`** with a plain-language `README.txt`.
 
 | Include | Leave out |
 |---------|-----------|
-| `Illustrated IF Studio.exe`, `README.txt`, `tools/`, `server/`, `electron/`, `editor-web/`, `engine-*/`, `scripts/`, `projects/` (minus finding-secrets by default), `package.json`, **`node_modules/`** (recommended) | `.git/`, `dist/`, `build/`, `*.zip`, `studio-settings.json`, agent junk; `projects/finding-secrets/` unless `--include-finding-secrets` |
+| `Illustrated IF Studio.exe`, `README.txt`, `tools/`, `server/`, `electron/`, `editor-web/`, `engine-*/`, `scripts/`, `projects/sample-project/`, `package.json`, **`node_modules/`** (recommended) | `.git/`, `dist/`, `build/`, `*.zip`, `studio-settings.json`, agent junk, and every other project in `projects/` unless you pass `--projects` or `--all-projects` |
 
 **Gotchas (all handled, but good to know):**
 - The one-time setup needs Administrator (UAC "Yes") + winget ("App Installer", preinstalled on

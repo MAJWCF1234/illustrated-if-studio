@@ -17,18 +17,19 @@ tools/.export-tools-ready
 # Editor autosave backups — git is the history now
 *.bak
 
-# Player save slots are runtime data; savesDir() recreates them on demand
-projects/*/saves/
+# Stories are the author's content, not platform code, so everything under
+# projects/ stays local — including projects set aside by an overwrite
+# (projects/.replaced/). Only the sample that ships with the studio is tracked.
+# The studio still finds local projects on disk; listProjects reads projects/.
+projects/*
+!projects/sample-project/
+!projects/README.md
 
-# Projects set aside by an overwrite during create/import — local safety net
-projects/.replaced/
+# Player save slots are runtime data; savesDir() recreates them on demand
+projects/sample-project/saves/
 
 # Launcher diagnostics written next to the studio on every start
 tools/logs/
-
-# Game content kept local-only — never committed to the platform repo.
-# The studio still discovers it on disk (listProjects reads projects/).
-projects/finding-secrets/
 
 # Archives and packaged builds
 *.zip

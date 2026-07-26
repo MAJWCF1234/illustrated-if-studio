@@ -1,15 +1,18 @@
 #!/usr/bin/env node
 /**
- * Build a clean boyfriend handoff zip for Maddie.
+ * Build a clean handoff zip: unzip it, double-click, start writing a story.
  *
- * Default: include node_modules (Electron), sample-project, launcher, README.txt.
- * Exclude: .git, dist, root *.zip, studio-settings.json, agent junk.
- * Exclude projects/finding-secrets unless --include-finding-secrets.
+ * Ships node_modules by default so the recipient installs nothing, plus the
+ * launcher, README.txt, and the sample project. Left out: .git, dist, root
+ * *.zip, studio-settings.json, scratch files, and every project except the
+ * sample — stories belong to their author and are usually already on the
+ * machine the zip is going to.
  *
  * Usage:
  *   node tools/emergency/package-handoff.mjs
- *   node tools/emergency/package-handoff.mjs --include-finding-secrets
- *   node tools/emergency/package-handoff.mjs --out D:\Desktop\illustrated-if-for-him.zip
+ *   node tools/emergency/package-handoff.mjs --projects sample-project,my-story
+ *   node tools/emergency/package-handoff.mjs --all-projects
+ *   node tools/emergency/package-handoff.mjs --out D:\Desktop\studio.zip
  *   node tools/emergency/package-handoff.mjs --no-node-modules   # smaller; first launch downloads Electron
  */
 import fs from "node:fs";
@@ -22,14 +25,20 @@ const studioRoot = path.resolve(__dirname, "..", "..");
 
 function parseArgs(argv) {
   const opts = {
-    includeFindingSecrets: false,
+    projects: ["sample-project"],
+    allProjects: false,
     includeNodeModules: true,
     out: "",
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === "--include-finding-secrets") opts.includeFindingSecrets = true;
-    else if (a === "--no-node-modules") opts.includeNodeModules = false;
+    if (a === "--all-projects") opts.allProjects = true;
+    else if (a === "--projects" && argv[i + 1]) {
+      opts.projects = argv[++i]
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    } else if (a === "--no-node-modules") opts.includeNodeModules = false;
     else if (a === "--out" && argv[i + 1]) opts.out = path.resolve(argv[++i]);
     else if (a === "--help" || a === "-h") opts.help = true;
     else throw new Error(`Unknown argument: ${a}`);
@@ -74,14 +83,20 @@ function shouldSkip(name, relPosix) {
   if (name.endsWith(".zip")) return true;
   if (name.endsWith(".bak")) return true;
   if (name.endsWith(".log")) return true;
-  if (relPosix === "projects/finding-secrets") return true; // gated by flag below
   if (relPosix === "tools/logs") return true; // launcher diagnostics from this machine
   if (relPosix.startsWith("projects/") && relPosix.endsWith("/saves")) return true;
   if (relPosix.includes("/__pycache__/") || relPosix.endsWith("/__pycache__")) return true;
   return false;
 }
 
-function copyTree(src, dest, { includeFindingSecrets }) {
+/** A story folder the sender didn't ask to ship. Files under projects/ stay. */
+function isUnwantedProject(relPosix, isDir, { allProjects, projects }) {
+  if (!isDir || allProjects) return false;
+  const match = /^projects\/([^/]+)$/.exec(relPosix);
+  return match ? !projects.includes(match[1]) : false;
+}
+
+function copyTree(src, dest, opts) {
   ensureDir(dest);
   const entries = fs.readdirSync(src, { withFileTypes: true });
   for (const ent of entries) {
@@ -90,16 +105,14 @@ function copyTree(src, dest, { includeFindingSecrets }) {
     const rel = path.relative(studioRoot, from).split(path.sep).join("/");
 
     if (ent.name === "node_modules") continue; // optional second pass
-    if (ent.name === "finding-secrets" && rel === "projects/finding-secrets" && !includeFindingSecrets) {
-      console.log("  skip projects/finding-secrets (pass --include-finding-secrets to keep)");
+    if (isUnwantedProject(rel, ent.isDirectory(), opts)) {
+      console.log(`  skip ${rel} (use --projects or --all-projects to keep it)`);
       continue;
     }
-    if (shouldSkip(ent.name, rel) && !(ent.name === "finding-secrets" && includeFindingSecrets)) {
-      continue;
-    }
+    if (shouldSkip(ent.name, rel)) continue;
 
     if (ent.isDirectory()) {
-      copyTree(from, to, { includeFindingSecrets });
+      copyTree(from, to, opts);
     } else if (ent.isFile()) {
       ensureDir(path.dirname(to));
       fs.copyFileSync(from, to);
@@ -147,9 +160,10 @@ function main() {
     console.log(`Usage: node tools/emergency/package-handoff.mjs [options]
 
 Options:
-  --include-finding-secrets   Keep projects/finding-secrets (default: exclude)
-  --no-node-modules           Omit node_modules (smaller; first launch downloads Electron)
-  --out <path>                Output zip path (default: dist/illustrated-if-studio-handoff.zip)
+  --projects <a,b>    Story folders to ship (default: sample-project)
+  --all-projects      Ship every project in projects/
+  --no-node-modules   Omit node_modules (smaller; first launch downloads Electron)
+  --out <path>        Output zip path (default: dist/illustrated-if-studio-handoff.zip)
 `);
     return;
   }
@@ -163,16 +177,16 @@ Options:
   console.log(`  root:    ${studioRoot}`);
   console.log(`  staging: ${staging}`);
   console.log(`  out:     ${outZip}`);
-  console.log(`  finding-secrets: ${opts.includeFindingSecrets ? "INCLUDE" : "exclude"}`);
-  console.log(`  node_modules:    ${opts.includeNodeModules ? "INCLUDE" : "omit"}`);
+  console.log(`  projects:     ${opts.allProjects ? "ALL" : opts.projects.join(", ") || "(none)"}`);
+  console.log(`  node_modules: ${opts.includeNodeModules ? "INCLUDE" : "omit"}`);
 
   rmrf(staging);
   ensureDir(staging);
 
   console.log("Copying studio files…");
-  copyTree(studioRoot, staging, { includeFindingSecrets: opts.includeFindingSecrets });
+  copyTree(studioRoot, staging, opts);
 
-  // Never ship machine-local settings — he should land on sample-project.
+  // Never ship machine-local settings — the recipient lands on the sample.
   const settings = path.join(staging, "studio-settings.json");
   if (fs.existsSync(settings)) fs.unlinkSync(settings);
 
@@ -196,8 +210,18 @@ Options:
   if (fs.existsSync(path.join(staging, "studio-settings.json"))) {
     throw new Error("studio-settings.json leaked into staging");
   }
-  if (!opts.includeFindingSecrets && fs.existsSync(path.join(staging, "projects", "finding-secrets"))) {
-    throw new Error("finding-secrets leaked into staging");
+  // A story travelling inside a zip its author never meant to send is the one
+  // mistake here that cannot be taken back, so fail loudly instead.
+  if (!opts.allProjects) {
+    const projectsDir = path.join(staging, "projects");
+    const shipped = fs.existsSync(projectsDir)
+      ? fs
+          .readdirSync(projectsDir, { withFileTypes: true })
+          .filter((e) => e.isDirectory())
+          .map((e) => e.name)
+      : [];
+    const extra = shipped.filter((name) => !opts.projects.includes(name));
+    if (extra.length) throw new Error(`Projects leaked into staging: ${extra.join(", ")}`);
   }
 
   console.log("Zipping…");
