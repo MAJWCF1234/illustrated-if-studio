@@ -99,9 +99,16 @@ function publicPath(abs) {
   return path.relative(studioRoot, abs).split(path.sep).join("/");
 }
 
+function resolveOutRoot(destination) {
+  const chosen = String(destination || "").trim();
+  if (!chosen) return outRoot;
+  return path.resolve(chosen);
+}
+
 function runExport(target, opts = {}) {
   const projectDir = getProjectDir();
-  const args = { studioRoot, projectDir, outRoot };
+  const exportOut = resolveOutRoot(opts.destination);
+  const args = { studioRoot, projectDir, outRoot: exportOut };
   if (target === "html") return exportHtml(args);
   if (target === "python") return exportPython(args);
   if (target === "cpp") return exportCpp(args);
@@ -382,7 +389,20 @@ async function handleApi(req, res, urlPath, searchParams) {
 
   if (req.method === "POST" && urlPath === "/api/export-all") {
     try {
-      const results = ["html", "python", "cpp", "raw"].map((t) => formatExportResult(runExport(t)));
+      let destination = "";
+      try {
+        const body = await readJsonBody(req);
+        destination = body.destination || "";
+        if (body.saveDestination && body.destination) {
+          saveSettings(studioRoot, { exportDestination: String(body.destination).trim() });
+        }
+      } catch (err) {
+        if (err.status === 400) return sendJson(res, 400, { error: err.message });
+        // empty body is fine
+      }
+      const results = ["html", "python", "cpp", "raw"].map((t) =>
+        formatExportResult(runExport(t, { destination }))
+      );
       const ok = results.every((r) => r.ok);
       const output = results.map((r) => r.output).join("\n\n---\n\n");
       return sendJson(res, ok ? 200 : 400, { ok, results, output });

@@ -978,12 +978,15 @@ async function runExport(target) {
   closeExportMenu();
   if (!(await saveProject())) return;
   toast(`Exporting ${target}…`);
-  let body = target === "all" ? "{}" : JSON.stringify({ target });
-  if (target === "raw") {
-    const dest = document.getElementById("proj-export-dest")?.value?.trim() || "";
-    body = JSON.stringify({ target: "raw", destination: dest, saveDestination: Boolean(dest) });
-  }
+  const dest = document.getElementById("proj-export-dest")?.value?.trim() || "";
   const endpoint = target === "all" ? "/api/export-all" : "/api/export";
+  const body =
+    target === "all"
+      ? JSON.stringify(dest ? { destination: dest, saveDestination: true } : {})
+      : JSON.stringify({
+          target,
+          ...(dest ? { destination: dest, saveDestination: true } : {}),
+        });
   const res = await fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1179,7 +1182,7 @@ document.getElementById("btn-proj-save-dest").addEventListener("click", async ()
   toast("Export destination saved");
   showLog(
     "Destination saved",
-    `Raw exports go to:\n${data.settings.resolvedExportDestination || exportDestination || "(studio dist/raw-projects)"}`
+    `Exports go to:\n${data.settings.resolvedExportDestination || exportDestination || "(studio dist folder)"}`
   );
 });
 

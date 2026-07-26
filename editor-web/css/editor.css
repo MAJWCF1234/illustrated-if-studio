@@ -312,8 +312,6 @@ body { display: flex; flex-direction: column; overflow: hidden; }
 .preview-toolbar strong { font-size: 0.8rem; margin-right: 0.35rem; color: var(--accent); }
 #preview-frame { flex: 1; width: 100%; border: 0; background: #000; }
 
-#preview-frame { flex: 1; width: 100%; border: 0; background: #000; }
-
 .inspector .empty {
   color: var(--muted);
   margin: 2.5rem 1rem 0;

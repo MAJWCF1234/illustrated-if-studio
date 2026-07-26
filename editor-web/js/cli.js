@@ -10,7 +10,7 @@ const HELP = `Illustrated IF Studio CLI — high-level commands
   projects | ls                List projects in /projects
   new [--id name] [--title T]  Create a starter project and open it
   use <id>                     Switch active project and reload editor
-  dest [path]                  Get or set raw-export destination folder
+  dest [path]                  Get or set export destination folder (HTML/Python/C++/raw)
   validate                     Validate the active project
   save                         Save unsaved scene edits (if any)
   scenes                       Scene count + start id
@@ -110,7 +110,7 @@ export async function runCliCommand(line, ctx) {
         `project    ${h.data.activeProjectId}`,
         `path       ${h.data.projectDir}`,
         `exports    ${(h.data.exports || []).join(", ")}`,
-        `raw dest   ${s.data?.resolvedExportDestination || "(default)"}`,
+        `export dest ${s.data?.resolvedExportDestination || "(default)"}`,
         s.data?.exportDestination ? `saved dest ${s.data.exportDestination}` : null,
       ].filter(Boolean);
       return { text: lines.join("\n"), ok: true };
