@@ -21,6 +21,7 @@ export const state = {
     blank: "",
     partial: "5abc",
     padded: " 7 ",
+    nullVar: null,
   },
   history: [],
 };
@@ -60,4 +61,13 @@ export const cases = [
   ["all with unset var", { all: [{ hasAbility: "fly" }, { var: "gold", gte: 1 }] }],
   ["any with unset var", { any: [{ var: "gold", gte: 1 }, { hasAbility: "fly" }] }],
   ["nested not over truthy", { not: { var: "flag", truthy: false } }],
+  // Explicit JSON null is Number(null)→0 in JS/C++; absent vars stay unmet.
+  ["null var + gte 0", { var: "nullVar", gte: 0 }],
+  ["null var + lte 0", { var: "nullVar", lte: 0 }],
+  // Malformed all/any must not throw (C++: bad all→true, bad any→false).
+  ["malformed all string", { all: "broken" }],
+  ["malformed any string", { any: "broken" }],
+  ["malformed all object", { all: { hasAbility: "fly" } }],
+  ["empty all", { all: [] }],
+  ["empty any", { any: [] }],
 ];

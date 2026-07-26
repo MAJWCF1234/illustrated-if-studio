@@ -39,9 +39,25 @@ export function validateProject(projectDir) {
   const missingArt = [];
 
   const inbound = Object.fromEntries([...ids].map((id) => [id, 0]));
+  if (Array.isArray(scenes)) {
+    errors.push("scenes must be an object keyed by scene id, not an array");
+    return { ok: false, errors, warnings, notes, project, sceneCount: 0 };
+  }
   for (const [id, scene] of Object.entries(scenes)) {
+    if (!scene || typeof scene !== "object" || Array.isArray(scene)) {
+      errors.push(`Scene "${id}" is not a valid scene object`);
+      continue;
+    }
     if (!scene.text) errors.push(`Scene "${id}" has no story text yet`);
-    for (const c of scene.choices || []) {
+    const choices = scene.choices;
+    if (choices != null && !Array.isArray(choices)) {
+      errors.push(`Scene "${id}" has choices that are not a list`);
+    }
+    for (const c of Array.isArray(choices) ? choices : []) {
+      if (!c || typeof c !== "object") {
+        errors.push(`Scene "${id}" has a malformed choice entry`);
+        continue;
+      }
       if (!c.text) errors.push(`Scene "${id}" has a choice with no label — players need something to click`);
       if (!c.next) errors.push(`Scene "${id}" has a choice that doesn't go anywhere — pick a target scene`);
       else if (!ids.has(c.next))
@@ -85,7 +101,11 @@ export function validateProject(projectDir) {
       warnings.push(`Scene "${id}" is never linked from anywhere — players can't reach it`);
     }
   }
-  const dead = [...ids].filter((id) => !(scenes[id].choices || []).length);
+  const dead = [...ids].filter((id) => {
+    const scene = scenes[id];
+    if (!scene || typeof scene !== "object") return false;
+    return !(Array.isArray(scene.choices) ? scene.choices : []).length;
+  });
   if (dead.length) {
     warnings.push(
       `${dead.length} scene${dead.length === 1 ? "" : "s"} with no choices (dead end): ${dead.slice(0, 8).join(", ")}${
@@ -96,7 +116,15 @@ export function validateProject(projectDir) {
 
   const locales = project.locales;
   if (locales && typeof locales === "object") {
-    for (const entry of locales.available || []) {
+    // Anything non-array here (an object map, a number) threw "is not iterable" out of
+    // validateProject, which surfaced as a 500 on /api/validate and blocked every export.
+    const available = Array.isArray(locales.available) ? locales.available : [];
+    if (locales.available != null && !Array.isArray(locales.available)) {
+      warnings.push(
+        "project.locales.available must be a list of { id, label, file } entries — ignoring it"
+      );
+    }
+    for (const entry of available) {
       if (!entry?.id) {
         warnings.push("Locale entry missing id");
         continue;

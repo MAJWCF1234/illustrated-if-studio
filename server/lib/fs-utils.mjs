@@ -121,6 +121,33 @@ export function slugify(id) {
   return s;
 }
 
+/**
+ * Sanitize an uploaded asset basename so it cannot escape the assets folder
+ * or hit Windows reserved device names / path-length traps.
+ * @returns {{ ok: true, filename: string } | { ok: false, error: string }}
+ */
+export function safeAssetFilename(rawName, { maxLen = 120 } = {}) {
+  let filename = path.basename(String(rawName || "").trim());
+  // path.basename leaves a trailing NUL in the string on some inputs; strip controls.
+  filename = filename.replace(/[\u0000-\u001F\u007F]/g, "");
+  if (!filename || !/\.(png|jpe?g|webp|gif|svg)$/i.test(filename)) {
+    return { ok: false, error: "filename must be an image (png/jpg/webp/gif/svg)" };
+  }
+  filename = filename.replace(/[^\w.\-]+/g, "_");
+  if (!filename || filename === "." || filename === "..") {
+    return { ok: false, error: "filename must be an image (png/jpg/webp/gif/svg)" };
+  }
+  const stem = filename.replace(/\.[^.]+$/, "");
+  const ext = filename.slice(stem.length);
+  if (WIN_RESERVED.test(stem)) {
+    filename = `file-${stem}${ext}`;
+  }
+  if (filename.length > maxLen) {
+    return { ok: false, error: `filename too long (max ${maxLen} characters)` };
+  }
+  return { ok: true, filename };
+}
+
 /** Strip controls / non-strings for package README labels. */
 export function safeLabel(value, fallback = "Untitled") {
   if (typeof value !== "string") {

@@ -17,7 +17,10 @@ def _as_number(value: Any) -> float | None:
 
     Mirrors the JS engine's Number() coercion: a misspelled or unset variable
     makes the comparison simply false instead of ending the game.
+    Explicit JSON null matches Number(null) → 0 (same as the C++ header).
     """
+    if value is None:
+        return 0.0  # JS Number(null) is 0; absent vars never reach here
     if isinstance(value, bool):
         return float(value)
     if isinstance(value, (int, float)):
@@ -34,16 +37,20 @@ def _as_number(value: Any) -> float | None:
 
 
 def eval_when(when: dict | None, state: dict) -> bool:
-    if not when:
+    if not when or not isinstance(when, dict):
         return True
     if "hasAbility" in when:
-        return when["hasAbility"] in state["abilities"]
+        abilities = state.get("abilities") or []
+        return when["hasAbility"] in abilities if isinstance(abilities, (list, set, tuple)) else False
     if "var" in when:
-        left = state["vars"].get(when["var"])
+        left = state["vars"].get(when["var"]) if isinstance(state.get("vars"), dict) else None
         if "eq" in when:
             return left == when["eq"]
         if "gte" in when or "lte" in when:
             key = "gte" if "gte" in when else "lte"
+            # Absent var → unmet (None from .get). Present null → Number(null)=0.
+            if when["var"] not in (state.get("vars") or {}) and left is None:
+                return False
             lhs = _as_number(left)
             rhs = _as_number(when[key])
             if lhs is None or rhs is None:
@@ -54,10 +61,17 @@ def eval_when(when: dict | None, state: dict) -> bool:
         return left is not None
     if "not" in when:
         return not eval_when(when["not"], state)
+    # Malformed all/any: match C++ (non-array all → true, non-array any → false).
     if "all" in when:
-        return all(eval_when(w, state) for w in when["all"])
+        items = when["all"]
+        if not isinstance(items, list):
+            return True
+        return all(eval_when(w, state) for w in items)
     if "any" in when:
-        return any(eval_when(w, state) for w in when["any"])
+        items = when["any"]
+        if not isinstance(items, list):
+            return False
+        return any(eval_when(w, state) for w in items)
     return True
 
 

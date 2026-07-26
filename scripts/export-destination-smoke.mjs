@@ -31,6 +31,14 @@ const block = [
   "C:\\Users",
   "C:\\",
   "D:\\",
+  // Relative / other-drive / verbatim / UNC bypasses that used to slip through
+  path.resolve("..", "..", "..", "Windows"),
+  "D:\\Windows",
+  "D:\\Windows\\System32",
+  "\\\\?\\C:\\Windows",
+  "\\\\?\\C:\\Windows\\System32",
+  "\\\\localhost\\C$\\Windows",
+  "\\\\127.0.0.1\\C$\\Program Files",
 ];
 
 let bad = 0;

@@ -56,7 +56,8 @@ export function loadLastChoices(projectId) {
   try {
     const raw = readRaw(projectId, "lastChoices");
     const obj = raw == null ? {} : JSON.parse(raw);
-    return obj && typeof obj === "object" ? obj : {};
+    // Reject arrays — they are objects in JS but not a scene→choice map.
+    return obj && typeof obj === "object" && !Array.isArray(obj) ? obj : {};
   } catch {
     return {};
   }
@@ -73,11 +74,14 @@ export function saveLeaf(projectId, leaf, value) {
 }
 
 export function clearPlaythrough(projectId, { keepAbilities }) {
+  // Same shape guard as loadState: corrupt storage must never leave a non-array
+  // in abilities (includes() would then crash unlockAbility / hasAbility checks).
   const abilities = keepAbilities
     ? (() => {
         try {
           const raw = readRaw(projectId, "abilities");
-          return JSON.parse(raw || "[]");
+          const value = JSON.parse(raw || "[]");
+          return Array.isArray(value) ? value : [];
         } catch {
           return [];
         }

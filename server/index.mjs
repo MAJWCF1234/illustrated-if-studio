@@ -2,7 +2,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { listImageFiles, readJson, writeJson, ensureDir } from "./lib/fs-utils.mjs";
+import { listImageFiles, readJson, writeJson, ensureDir, safeAssetFilename } from "./lib/fs-utils.mjs";
 import { validateProject } from "./lib/validate.mjs";
 import { mergeTheme } from "./lib/theme-defaults.mjs";
 import {
@@ -10,6 +10,7 @@ import {
   saveSettings,
   resolveExportDestination,
   describeUnsafeDestination,
+  normalizeDestinationPath,
   listProjects,
 } from "./lib/settings.mjs";
 import { exportHtml } from "./exporters/html.mjs";
@@ -63,13 +64,50 @@ function sendJson(res, status, body) {
   res.end(JSON.stringify(body, null, 2));
 }
 
+/** Cap request bodies so a huge paste / hostile client cannot OOM the studio. */
+const MAX_BODY_BYTES = 8 * 1024 * 1024;
+
 function readBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
-    req.on("data", (c) => chunks.push(c));
+    let total = 0;
+    req.on("data", (c) => {
+      total += c.length;
+      if (total > MAX_BODY_BYTES) {
+        const err = new Error(`Request body too large (max ${MAX_BODY_BYTES} bytes)`);
+        err.status = 413;
+        reject(err);
+        req.destroy();
+        return;
+      }
+      chunks.push(c);
+    });
     req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
     req.on("error", reject);
   });
+}
+
+/** Active project ids must be a single path segment under projects/. */
+function assertSafeProjectId(id) {
+  const raw = String(id || "").trim();
+  if (!raw) {
+    const err = new Error("Project id required");
+    err.status = 400;
+    throw err;
+  }
+  if (raw.includes("\0") || /[\\/]/.test(raw) || raw === "." || raw === ".." || raw.includes("..")) {
+    const err = new Error(`Invalid project id: ${raw}`);
+    err.status = 400;
+    throw err;
+  }
+  const projectsRoot = path.resolve(studioRoot, "projects");
+  const dir = path.resolve(projectsRoot, raw);
+  if (path.dirname(dir) !== projectsRoot) {
+    const err = new Error(`Invalid project id: ${raw}`);
+    err.status = 400;
+    throw err;
+  }
+  return { id: raw, dir };
 }
 
 function safeProjectPath(rel) {
@@ -111,7 +149,7 @@ function publicPath(abs) {
 function resolveOutRoot(destination) {
   const chosen = String(destination || "").trim();
   if (!chosen) return outRoot;
-  return path.resolve(chosen);
+  return normalizeDestinationPath(chosen);
 }
 
 /** Throws a 400-shaped error when a destination would write into a system tree. */
@@ -119,14 +157,26 @@ function assertSafeDestination(destination) {
   const chosen = String(destination || "").trim();
   if (!chosen) return;
   const reason = describeUnsafeDestination(chosen);
-  if (!reason) return;
-  const err = new Error(reason);
-  err.status = 400;
-  throw err;
+  if (reason) {
+    const err = new Error(reason);
+    err.status = 400;
+    throw err;
+  }
+  // Raw export clears destination/<folderName>. Aiming that at projects/ can
+  // delete someone's story (e.g. folderName matching an existing project id).
+  const resolved = normalizeDestinationPath(chosen);
+  const projectsRoot = path.resolve(studioRoot, "projects");
+  if (resolved === projectsRoot || isInsideRoot(resolved, projectsRoot)) {
+    const err = new Error(
+      `"${resolved}" is inside the studio projects folder. Export to Desktop, Documents, or the studio dist folder instead so a project isn't overwritten.`
+    );
+    err.status = 400;
+    throw err;
+  }
 }
 
 function runExport(target, opts = {}) {
-  const projectDir = getProjectDir();
+  const projectDir = opts.projectDir || getProjectDir();
   assertSafeDestination(opts.destination);
   const exportOut = resolveOutRoot(opts.destination);
   const args = { studioRoot, projectDir, outRoot: exportOut };
@@ -145,6 +195,14 @@ function runExport(target, opts = {}) {
   const err = new Error(`Unknown export target: ${target}`);
   err.status = 400;
   throw err;
+}
+
+/** Optional body.projectId pins export to that project even if settings change mid-request. */
+function resolveExportProjectDir(body = {}) {
+  const raw = body.projectId || body.activeProjectId;
+  if (!raw) return getProjectDir();
+  const { dir } = assertSafeProjectId(raw);
+  return dir;
 }
 
 function formatExportResult(result) {
@@ -214,12 +272,26 @@ async function handleApi(req, res, urlPath, searchParams) {
       const dest = String(body.exportDestination || "").trim();
       const reason = dest ? describeUnsafeDestination(dest) : null;
       if (reason) return sendJson(res, 400, { error: reason });
+      if (dest) {
+        const resolved = normalizeDestinationPath(dest);
+        const projectsRoot = path.resolve(studioRoot, "projects");
+        if (resolved === projectsRoot || isInsideRoot(resolved, projectsRoot)) {
+          return sendJson(res, 400, {
+            error: `"${resolved}" is inside the studio projects folder. Pick Desktop, Documents, or dist instead.`,
+          });
+        }
+      }
       patch.exportDestination = dest;
     }
     if ("lastImportPath" in body) patch.lastImportPath = String(body.lastImportPath || "").trim();
     if ("activeProjectId" in body && !envProject) {
-      const id = String(body.activeProjectId || "").trim();
-      const dir = path.join(studioRoot, "projects", id);
+      let id;
+      let dir;
+      try {
+        ({ id, dir } = assertSafeProjectId(body.activeProjectId));
+      } catch (err) {
+        return sendJson(res, err.status || 400, { error: err.message });
+      }
       if (!fs.existsSync(path.join(dir, "project.json"))) {
         return sendJson(res, 400, { error: `Unknown project: ${id}` });
       }
@@ -258,11 +330,9 @@ async function handleApi(req, res, urlPath, searchParams) {
   if (req.method === "POST" && urlPath === "/api/assets/upload") {
     const body = await readJsonBody(req);
     const folder = body.folder === "characters" ? "characters" : "scene_images";
-    let filename = path.basename(String(body.filename || "").trim());
-    if (!filename || !/\.(png|jpe?g|webp|gif|svg)$/i.test(filename)) {
-      return sendJson(res, 400, { error: "filename must be an image (png/jpg/webp/gif/svg)" });
-    }
-    filename = filename.replace(/[^\w.\-]+/g, "_");
+    const nameCheck = safeAssetFilename(body.filename);
+    if (!nameCheck.ok) return sendJson(res, 400, { error: nameCheck.error });
+    const filename = nameCheck.filename;
     const dataUrl = String(body.dataBase64 || body.dataUrl || "");
     const m = dataUrl.match(/^data:([^;]+);base64,(.+)$/s) || (body.dataBase64 ? [null, null, body.dataBase64] : null);
     if (!m || !m[2]) return sendJson(res, 400, { error: "dataBase64 / dataUrl required" });
@@ -271,7 +341,16 @@ async function handleApi(req, res, urlPath, searchParams) {
     const dir = safeProjectPath(`assets/${folder}`);
     ensureDir(dir);
     const outPath = path.join(dir, filename);
-    fs.writeFileSync(outPath, buf);
+    // Belt-and-suspenders: resolved path must stay inside the chosen assets folder.
+    const dirResolved = path.resolve(dir);
+    if (path.resolve(outPath) !== path.join(dirResolved, filename) || path.dirname(path.resolve(outPath)) !== dirResolved) {
+      return sendJson(res, 400, { error: "filename escapes assets folder" });
+    }
+    try {
+      fs.writeFileSync(outPath, buf);
+    } catch (err) {
+      return sendJson(res, 400, { error: `Could not save asset: ${err.message}` });
+    }
     return sendJson(res, 200, {
       ok: true,
       folder,
@@ -311,8 +390,38 @@ async function handleApi(req, res, urlPath, searchParams) {
   }
 
   if (req.method === "GET" && urlPath === "/api/project") {
-    const project = readJson(path.join(projectDir, "project.json"));
-    const scenes = readJson(path.join(projectDir, project.story.scenes));
+    // A damaged project.json (hand-edited, half-synced, bad import) must not
+    // 500 the editor-load with a raw parser message — for a non-coder that just
+    // reads as "the editor won't open". Return an actionable error so the UI can
+    // tell them to pick another project instead.
+    let project;
+    try {
+      project = readJson(path.join(projectDir, "project.json"));
+      if (!project || typeof project !== "object" || Array.isArray(project)) {
+        throw new Error("not an object");
+      }
+    } catch {
+      return sendJson(res, 400, {
+        error: `The project "${getActiveProjectId()}" looks damaged — its project.json couldn't be read. Pick a different project from the Projects tab, or restore it from a backup.`,
+        activeProjectId: getActiveProjectId(),
+      });
+    }
+    const scenesRel = project.story?.scenes;
+    if (!scenesRel) {
+      return sendJson(res, 400, {
+        error: `The project "${getActiveProjectId()}" is missing its story file reference. Pick a different project from the Projects tab.`,
+        activeProjectId: getActiveProjectId(),
+      });
+    }
+    let scenes;
+    try {
+      scenes = readJson(path.join(projectDir, scenesRel));
+    } catch {
+      return sendJson(res, 400, {
+        error: `The story file for "${getActiveProjectId()}" couldn't be read. Pick a different project from the Projects tab.`,
+        activeProjectId: getActiveProjectId(),
+      });
+    }
     let theme = {};
     try {
       theme = readJson(path.join(projectDir, project.theme || "theme/theme.json"));
@@ -336,6 +445,7 @@ async function handleApi(req, res, urlPath, searchParams) {
     const looksLikeTheme =
       incoming &&
       typeof incoming === "object" &&
+      !Array.isArray(incoming) &&
       ["id", "colors", "fonts", "layout", "audio", "templates"].some((k) => k in incoming);
     if (!looksLikeTheme) {
       return sendJson(res, 400, { error: "Body must include a theme object" });
@@ -352,24 +462,54 @@ async function handleApi(req, res, urlPath, searchParams) {
 
   if (req.method === "PUT" && urlPath === "/api/scenes") {
     const body = await readJsonBody(req);
-    if (!body.scenes || typeof body.scenes !== "object") {
+    if (!body.scenes || typeof body.scenes !== "object" || Array.isArray(body.scenes)) {
       return sendJson(res, 400, { error: "Body must include scenes object" });
+    }
+    const sceneIds = Object.keys(body.scenes);
+    if (sceneIds.length > 5000) {
+      return sendJson(res, 400, { error: "Too many scenes (max 5000 per save)" });
+    }
+    for (const sid of sceneIds) {
+      const scene = body.scenes[sid];
+      if (!scene || typeof scene !== "object" || Array.isArray(scene)) {
+        return sendJson(res, 400, { error: `Scene "${sid}" must be an object` });
+      }
+      if (scene.choices != null && !Array.isArray(scene.choices)) {
+        return sendJson(res, 400, { error: `Scene "${sid}" choices must be an array` });
+      }
+      if (typeof scene.text === "string" && scene.text.length > 500_000) {
+        return sendJson(res, 400, { error: `Scene "${sid}" text is too long (max 500000 chars)` });
+      }
     }
     const project = readJson(path.join(projectDir, "project.json"));
     const outPath = safeProjectPath(project.story.scenes);
+    const start =
+      body.start != null && body.start !== ""
+        ? String(body.start)
+        : project.start || "start";
     const payload = {
       formatVersion: 1,
-      start: body.start || project.start || "start",
+      start,
       scenes: body.scenes,
     };
     const bak = outPath + ".bak";
     if (fs.existsSync(outPath)) fs.copyFileSync(outPath, bak);
     writeJson(outPath, payload);
+    // Keep project.json.start in sync — engines/validate prefer it over scenes.start.
+    // Renaming the start scene in the editor would otherwise leave a dangling id.
+    if (project.start !== start) {
+      const projectPath = path.join(projectDir, "project.json");
+      const projectBak = projectPath + ".bak";
+      if (fs.existsSync(projectPath)) fs.copyFileSync(projectPath, projectBak);
+      project.start = start;
+      writeJson(projectPath, project);
+    }
     return sendJson(res, 200, {
       ok: true,
       path: outPath,
       backup: bak,
       count: Object.keys(body.scenes).length,
+      start,
     });
   }
 
@@ -404,12 +544,14 @@ async function handleApi(req, res, urlPath, searchParams) {
     let target = "html";
     let destination = "";
     let folderName = "";
+    let exportProjectDir = projectDir;
     if (urlPath === "/api/export") {
       try {
         const body = await readJsonBody(req);
         target = body.target || searchParams.get("target") || "html";
         destination = body.destination || "";
         folderName = body.folderName || "";
+        exportProjectDir = resolveExportProjectDir(body);
         assertSafeDestination(destination);
         if (body.saveDestination && body.destination) {
           saveSettings(studioRoot, { exportDestination: String(body.destination).trim() });
@@ -420,7 +562,9 @@ async function handleApi(req, res, urlPath, searchParams) {
       }
     }
     try {
-      const result = formatExportResult(runExport(target, { destination, folderName }));
+      const result = formatExportResult(
+        runExport(target, { destination, folderName, projectDir: exportProjectDir })
+      );
       return sendJson(res, result.ok ? 200 : 400, result);
     } catch (err) {
       return sendJson(res, err.status || 500, { ok: false, error: String(err.message || err) });
@@ -430,9 +574,11 @@ async function handleApi(req, res, urlPath, searchParams) {
   if (req.method === "POST" && urlPath === "/api/export-all") {
     try {
       let destination = "";
+      let exportProjectDir = projectDir;
       try {
         const body = await readJsonBody(req);
         destination = body.destination || "";
+        exportProjectDir = resolveExportProjectDir(body);
         assertSafeDestination(destination);
         if (body.saveDestination && body.destination) {
           saveSettings(studioRoot, { exportDestination: String(body.destination).trim() });
@@ -442,7 +588,7 @@ async function handleApi(req, res, urlPath, searchParams) {
         // empty body is fine
       }
       const results = ["html", "python", "cpp", "raw"].map((t) =>
-        formatExportResult(runExport(t, { destination }))
+        formatExportResult(runExport(t, { destination, projectDir: exportProjectDir }))
       );
       const ok = results.every((r) => r.ok);
       const output = results.map((r) => r.output).join("\n\n---\n\n");

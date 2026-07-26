@@ -109,15 +109,28 @@ export class NovelEngine {
     if (f.display) r.setProperty("--font-display", `"${f.display}", Georgia, serif`);
     if (f.ui) r.setProperty("--font-ui", `"${f.ui}", Georgia, serif`);
     if (f.body) r.setProperty("--font-body", `"${f.body}", Georgia, serif`);
-    if (l.maxWidth) r.setProperty("--max-width", `${l.maxWidth}px`);
-    if (l.gameHeight) r.setProperty("--game-height", `${l.gameHeight}px`);
-    if (l.stageRatio) r.setProperty("--stage-ratio", String(l.stageRatio));
+    // Out-of-range numbers are dropped rather than passed through: a negative
+    // gameHeight collapsed the whole game frame to 0px, so the story loaded but
+    // nothing was on screen and nothing was logged.
+    const span = (value, min, max) => {
+      const n = Number(value);
+      return Number.isFinite(n) && n >= min && n <= max ? n : null;
+    };
+    const maxWidth = span(l.maxWidth, 320, 10000);
+    const gameHeight = span(l.gameHeight, 240, 10000);
+    const stageRatio = span(l.stageRatio, 0.05, 20);
+    if (maxWidth != null) r.setProperty("--max-width", `${maxWidth}px`);
+    if (gameHeight != null) r.setProperty("--game-height", `${gameHeight}px`);
+    if (stageRatio != null) r.setProperty("--stage-ratio", String(stageRatio));
 
-    const artRatio = sceneT.artRatio ?? l.artRatio;
+    const artRatio = span(sceneT.artRatio ?? l.artRatio, 0.05, 0.95);
+    const frameBorder = span(sceneT.frameBorderPx, 0, 48);
+    const storyRadius = span(sceneT.storyRadiusPx, 0, 96);
+    const choiceCols = span(sceneT.choiceColumns, 1, 6);
     if (artRatio != null) r.setProperty("--art-ratio", String(artRatio));
-    if (sceneT.frameBorderPx != null) r.setProperty("--frame-border", `${sceneT.frameBorderPx}px`);
-    if (sceneT.storyRadiusPx != null) r.setProperty("--story-radius", `${sceneT.storyRadiusPx}px`);
-    if (sceneT.choiceColumns) r.setProperty("--choice-cols", String(sceneT.choiceColumns));
+    if (frameBorder != null) r.setProperty("--frame-border", `${frameBorder}px`);
+    if (storyRadius != null) r.setProperty("--story-radius", `${storyRadius}px`);
+    if (choiceCols != null) r.setProperty("--choice-cols", String(Math.round(choiceCols)));
 
     document.body.dataset.sceneArt = sceneT.artPosition || "left";
     document.body.dataset.choiceStyle = sceneT.choiceStyle || "filled";
@@ -458,7 +471,10 @@ export class NovelEngine {
         row.querySelector('[data-act="clear"]')?.addEventListener("click", () => this.eraseSaveSlot(slot));
       });
     } catch (err) {
-      host.innerHTML = `<p class="settings-note">Could not load slots: ${String(err.message || err)}</p>`;
+      const escErr = String(err.message || err).replace(/[&<>"']/g, (c) =>
+        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]
+      );
+      host.innerHTML = `<p class="settings-note">Could not load slots: ${escErr}</p>`;
     }
   }
 

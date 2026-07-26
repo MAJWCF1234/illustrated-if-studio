@@ -258,12 +258,36 @@ export function mountDesignStudio(root, api) {
   }
 
   function renderPreview() {
-    const t = theme();
+    const raw = theme();
+    // Theme strings land inside style="" / class="" of an innerHTML template. A value
+    // carrying a quote closes the attribute and the rest of it is parsed as markup, so
+    // an imported theme could run script in the editor origin (which owns the write APIs).
+    const t = {
+      ...raw,
+      colors: mapValues(raw.colors, (v, k) => cssToken(v, DEFAULT_THEME.colors[k] || "#000")),
+      fonts: mapValues(raw.fonts, (v, k) => cssToken(v, DEFAULT_THEME.fonts[k] || "serif")),
+    };
     const c = t.colors;
-    const s = t.templates.scene;
-    const m = t.templates.menu;
-    const artPos = s.artPosition || "left";
-    const cols = s.choiceColumns || 2;
+    const rawScene = raw.templates.scene;
+    const rawMenu = raw.templates.menu;
+    const d = DEFAULT_THEME.templates;
+    const s = {
+      ...rawScene,
+      artPosition: cssClass(rawScene.artPosition, d.scene.artPosition),
+      choiceStyle: cssClass(rawScene.choiceStyle, d.scene.choiceStyle),
+      artRatio: cssNumber(rawScene.artRatio, d.scene.artRatio, 0.05, 0.95),
+      frameBorderPx: cssNumber(rawScene.frameBorderPx, d.scene.frameBorderPx, 0, 24),
+      storyRadiusPx: cssNumber(rawScene.storyRadiusPx, d.scene.storyRadiusPx, 0, 64),
+      choiceColumns: cssNumber(rawScene.choiceColumns, d.scene.choiceColumns, 1, 6),
+    };
+    const m = {
+      ...rawMenu,
+      gateStyle: cssClass(rawMenu.gateStyle, d.menu.gateStyle),
+      buttonStyle: cssClass(rawMenu.buttonStyle, d.menu.buttonStyle),
+      titleAlign: cssClass(rawMenu.titleAlign, d.menu.titleAlign),
+    };
+    const artPos = s.artPosition;
+    const cols = s.choiceColumns;
 
     if (previewMode === "menu") {
       preview.innerHTML = `
@@ -357,6 +381,34 @@ export function mountDesignStudio(root, api) {
   renderAll();
 
   return { refresh: renderAll };
+}
+
+function mapValues(obj, fn) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj || {})) out[k] = fn(v, k);
+  return out;
+}
+
+/** Colors / font names bound for a style="" attribute: allow CSS-ish text only. */
+const SAFE_CSS = /^[#\w\s.,%()/-]+$/;
+function cssToken(value, fallback) {
+  if (typeof value === "number") return Number.isFinite(value) ? String(value) : fallback;
+  if (typeof value !== "string") return fallback;
+  const v = value.trim();
+  if (!v || v.length > 80 || !SAFE_CSS.test(v) || /url\s*\(/i.test(v)) return fallback;
+  return v;
+}
+
+/** Template ids bound for a class="" attribute. */
+function cssClass(value, fallback) {
+  const v = typeof value === "string" ? value.trim() : "";
+  return /^[a-z][\w-]{0,40}$/i.test(v) ? v : fallback;
+}
+
+function cssNumber(value, fallback, min, max) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
 }
 
 function normalizeHex(hex) {

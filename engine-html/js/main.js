@@ -15,9 +15,15 @@ async function loadJson(rel) {
 }
 
 async function loadLocaleTables(project) {
-  const cfg = project.locales || {};
+  const cfg = project.locales && typeof project.locales === "object" ? project.locales : {};
   const tables = {};
-  for (const entry of cfg.available || []) {
+  // A hand-edited project.json can leave `available` as an object/number. Iterating
+  // that throws before the story ever loads, so the whole game dies over a language list.
+  const available = Array.isArray(cfg.available) ? cfg.available : [];
+  if (cfg.available != null && !Array.isArray(cfg.available)) {
+    console.warn("project.locales.available is not a list — ignoring locale overlays");
+  }
+  for (const entry of available) {
     if (!entry?.file || !entry?.id) continue;
     try {
       tables[entry.id] = await loadJson(entry.file);
@@ -47,7 +53,16 @@ async function main() {
     await initProjectBase();
     const project = await loadJson("project.json");
     const scenes = await loadJson(project.story.scenes);
-    const theme = await loadJson(project.theme || "theme/theme.json");
+    // The theme is decoration. A missing or corrupt theme.json used to abort boot and
+    // leave a playable story stuck behind "Loading…", in exports as well as the studio.
+    let theme = {};
+    try {
+      const loaded = await loadJson(project.theme || "theme/theme.json");
+      if (loaded && typeof loaded === "object" && !Array.isArray(loaded)) theme = loaded;
+      else console.warn("Theme file is not an object — using built-in defaults");
+    } catch (err) {
+      console.warn("Theme missing or invalid — using built-in defaults:", err.message || err);
+    }
     let abilitiesDoc = { abilities: [] };
     try {
       abilitiesDoc = await loadJson(project.story.abilities);

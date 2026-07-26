@@ -48,18 +48,41 @@ export function readSaveSlot(projectDir, slot) {
   }
 }
 
+// A save slot is written from whatever the player/editor POSTs, so every field
+// is coerced to the shape the loader expects. Arrays are objects in JS, so a
+// stray `vars: [1,2,3]` would otherwise be stored as-is and load back as
+// numeric-keyed junk; a non-string or 200KB label would land in the slot list
+// UI verbatim. This is the one authoritative place to normalize all of that.
+const LABEL_MAX = 120;
+const STRING_MAX = 2000;
+
+function plainObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function clampString(value, max) {
+  const s = typeof value === "string" ? value : value == null ? "" : String(value);
+  return s.length > max ? s.slice(0, max) : s;
+}
+
 export function writeSaveSlot(projectDir, slot, payload) {
   const id = String(slot);
   if (!SLOT_RE.test(id)) return { ok: false, error: "slot must be 1–5" };
+  const src = plainObject(payload);
+  const label = clampString(src.label, LABEL_MAX).trim() || `Slot ${id}`;
   const save = {
     formatVersion: 1,
     slot: Number(id),
-    label: payload.label || `Slot ${id}`,
-    playerName: String(payload.playerName || ""),
-    currentScene: String(payload.currentScene || "start"),
-    abilities: Array.isArray(payload.abilities) ? payload.abilities : [],
-    vars: payload.vars && typeof payload.vars === "object" ? payload.vars : {},
-    history: Array.isArray(payload.history) ? payload.history : [],
+    label,
+    playerName: clampString(src.playerName, STRING_MAX),
+    currentScene: clampString(src.currentScene || "start", STRING_MAX),
+    abilities: Array.isArray(src.abilities) ? src.abilities.filter((a) => typeof a === "string") : [],
+    vars: plainObject(src.vars),
+    // History drives rollback; a non-object beat would throw there, so keep only
+    // well-shaped beats with a scene id.
+    history: Array.isArray(src.history)
+      ? src.history.filter((h) => h && typeof h === "object" && !Array.isArray(h))
+      : [],
     updatedAt: new Date().toISOString(),
   };
   ensureDir(savesDir(projectDir));

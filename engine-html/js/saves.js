@@ -19,11 +19,15 @@ export function snapshotFromState(state, { label } = {}) {
 }
 
 export function applySnapshot(state, save) {
-  state.playerName = save.playerName || "";
-  state.currentScene = save.currentScene || "start";
-  state.abilities = Array.isArray(save.abilities) ? [...save.abilities] : [];
-  state.vars = save.vars && typeof save.vars === "object" ? { ...save.vars } : {};
-  state.history = Array.isArray(save.history) ? [...save.history] : [];
+  const s = save && typeof save === "object" ? save : {};
+  // Arrays are objects in JS: a slot hand-edited (or written by an older build)
+  // with vars:[1,2,3] must not load back as {0:1,1:2,2:3}.
+  const isPlainObject = (v) => Boolean(v) && typeof v === "object" && !Array.isArray(v);
+  state.playerName = typeof s.playerName === "string" ? s.playerName : "";
+  state.currentScene = s.currentScene || "start";
+  state.abilities = Array.isArray(s.abilities) ? s.abilities.filter((a) => typeof a === "string") : [];
+  state.vars = isPlainObject(s.vars) ? { ...s.vars } : {};
+  state.history = Array.isArray(s.history) ? s.history.filter((h) => isPlainObject(h)) : [];
 }
 
 function lsKey(projectId, slot) {

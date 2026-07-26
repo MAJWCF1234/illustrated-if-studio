@@ -166,14 +166,30 @@ async function loadAssets() {
 
 async function loadProject() {
   const res = await fetch("/api/project");
-  if (!res.ok) throw new Error("Failed to load /api/project");
+  if (!res.ok) {
+    // Surface the server's actionable message (e.g. a damaged project.json)
+    // instead of a generic failure the user can't act on.
+    let msg = "Couldn't open the project.";
+    try {
+      const body = await res.json();
+      if (body?.error) msg = body.error;
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new Error(msg);
+  }
   const data = await res.json();
   state.project = data.project;
   state.projectId = data.activeProjectId || data.project?.id || "sample-project";
   state.projectUrl = `/projects/${state.projectId}/`;
   state.scenes = data.scenes.scenes || data.scenes;
   state.theme = mergeTheme(data.theme);
-  state.startId = data.project.start || data.scenes.start || "start";
+  const claimedStart = data.project.start || data.scenes.start || "start";
+  state.startId =
+    (state.scenes[claimedStart] && claimedStart) ||
+    data.scenes.start ||
+    Object.keys(state.scenes)[0] ||
+    "start";
   els.title.textContent = data.project.title || data.project.id;
   const layout = data.project.meta?.layout || state.theme?.layout?.mode || "illustrated-if";
   els.meta.textContent = `${data.project.author || ""} · ${Object.keys(state.scenes).length} scenes · ${layout}`;
@@ -325,7 +341,7 @@ function renderChoicesEditor(scene) {
       ? `<option value="${escapeAttr(c.next || "")}" selected>${
           c.next ? `${escapeAttr(c.next)} (missing)` : "(no scene chosen)"
         }</option>`
-      : `<option value="" disabled ${!c.next ? "selected" : ""}>(pick a scene)</option>`;
+      : `<option value="" ${!c.next ? "selected" : ""}>(clear / pick a scene)</option>`;
     const options = ids
       .map((id) => `<option value="${escapeAttr(id)}" ${!broken && c.next === id ? "selected" : ""}>${escapeAttr(id)}</option>`)
       .join("");
@@ -1062,6 +1078,7 @@ async function runExport(target) {
     toast("Export already in progress…");
     return exportInFlight;
   }
+  const pinnedProjectId = state.projectId;
   exportInFlight = (async () => {
     closeExportMenu();
     if (!(await saveProject())) return;
@@ -1070,9 +1087,13 @@ async function runExport(target) {
     const endpoint = target === "all" ? "/api/export-all" : "/api/export";
     const body =
       target === "all"
-        ? JSON.stringify(dest ? { destination: dest, saveDestination: true } : {})
+        ? JSON.stringify({
+            projectId: pinnedProjectId,
+            ...(dest ? { destination: dest, saveDestination: true } : {}),
+          })
         : JSON.stringify({
             target,
+            projectId: pinnedProjectId,
             ...(dest ? { destination: dest, saveDestination: true } : {}),
           });
     const res = await fetch(endpoint, {
@@ -1200,6 +1221,10 @@ document.getElementById("proj-new-id")?.addEventListener("input", () => {
 });
 
 document.getElementById("btn-proj-new").addEventListener("click", async () => {
+  if (exportInFlight) {
+    toast("Wait for the current export to finish");
+    return;
+  }
   if (!(await confirmDiscardIfDirty("create a new project"))) return;
   const title = document.getElementById("proj-new-title").value.trim();
   const projectId = document.getElementById("proj-new-id").value.trim();
@@ -1242,6 +1267,10 @@ document.getElementById("btn-proj-new").addEventListener("click", async () => {
 });
 
 document.getElementById("btn-proj-open").addEventListener("click", async () => {
+  if (exportInFlight) {
+    toast("Wait for the current export to finish");
+    return;
+  }
   if (!(await confirmDiscardIfDirty("switch projects"))) return;
   const id = document.getElementById("proj-active").value;
   const res = await fetch("/api/settings", {

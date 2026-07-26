@@ -83,6 +83,25 @@ theme/
  * Import an existing studio project folder into projects/<id>/.
  * @returns {{ ok, projectDir, projectId, created }}
  */
+function readProjectManifest(projectJsonPath) {
+  let raw;
+  try {
+    raw = fs.readFileSync(projectJsonPath, "utf8");
+  } catch (err) {
+    return { ok: false, errors: [`Cannot read project.json: ${err.message}`] };
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    return { ok: false, errors: [`Invalid project.json: ${err.message}`] };
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { ok: false, errors: ["project.json must be a JSON object"] };
+  }
+  return { ok: true, project: parsed };
+}
+
 export function importProjectFolder({ studioRoot, sourcePath, projectId, overwrite = false }) {
   const opts = { overwrite: Boolean(overwrite) };
   const src = path.resolve(sourcePath);
@@ -93,7 +112,9 @@ export function importProjectFolder({ studioRoot, sourcePath, projectId, overwri
     return { ok: false, errors: [`No project.json in ${src}`] };
   }
 
-  const srcProject = readJson(path.join(src, "project.json"));
+  const manifest = readProjectManifest(path.join(src, "project.json"));
+  if (!manifest.ok) return manifest;
+  const srcProject = manifest.project;
   const id = slugify(projectId || srcProject.id || path.basename(src));
   const dest = path.join(studioRoot, "projects", id);
 
@@ -117,8 +138,13 @@ export function importProjectFolder({ studioRoot, sourcePath, projectId, overwri
     filter: (entry) => !entry.name.endsWith(".bak") && entry.name !== "node_modules",
   });
 
-  // Normalize id in project.json
-  const project = readJson(path.join(dest, "project.json"));
+  // Normalize id in project.json (re-read + re-validate after copy)
+  const destManifest = readProjectManifest(path.join(dest, "project.json"));
+  if (!destManifest.ok) {
+    removeDir(dest);
+    return { ok: false, errors: destManifest.errors, replacedBackup: replaced };
+  }
+  const project = destManifest.project;
   project.id = id;
   if (!project.theme) project.theme = "theme/theme.json";
   if (!project.meta) project.meta = {};

@@ -60,14 +60,72 @@ function isWithin(child, parent) {
 }
 
 /**
+ * Strip Win32 long-path / verbatim prefixes and refuse null bytes so later
+ * comparisons see the real target. Relative paths resolve against cwd.
+ */
+export function normalizeDestinationPath(dir) {
+  let s = String(dir ?? "").trim();
+  if (!s) return "";
+  if (s.includes("\0")) {
+    const err = new Error("Destination path contains a null byte");
+    err.code = "NULL_BYTE";
+    throw err;
+  }
+  // \\?\C:\foo  →  C:\foo ;  \\?\UNC\server\share  →  \\server\share
+  if (s.startsWith("\\\\?\\UNC\\") || s.startsWith("//?/UNC/")) {
+    s = "\\\\" + s.slice(s.toLowerCase().indexOf("unc") + 4);
+  } else if (s.startsWith("\\\\?\\") || s.startsWith("//?/")) {
+    s = s.slice(4);
+  }
+  return path.resolve(s);
+}
+
+/** Drive-root folders that are never safe export targets, on any volume. */
+const DRIVE_SYSTEM_DIRS = new Set([
+  "windows",
+  "program files",
+  "program files (x86)",
+  "programdata",
+  "$recycle.bin",
+  "system volume information",
+  "recovery",
+  "perflogs",
+]);
+
+/**
  * Why a destination is unusable, in words a non-coder can act on, or null when
  * it is fine. `Users` itself is refused but `Users\name\Desktop` is allowed.
  */
 export function describeUnsafeDestination(dir) {
-  const resolved = path.resolve(dir);
+  let resolved;
+  try {
+    resolved = normalizeDestinationPath(dir);
+  } catch (err) {
+    if (err.code === "NULL_BYTE") {
+      return `That destination path is not valid. Pick a normal folder like your Desktop or Documents.`;
+    }
+    throw err;
+  }
+  if (!resolved) return null;
+
+  // UNC / admin shares: exporters clear the target tree — never aim a wipe at
+  // a network path we cannot sanity-check the same way as a local folder.
+  if (resolved.startsWith("\\\\") || /^\/\/[^/]/.test(resolved)) {
+    return `"${resolved}" looks like a network (UNC) path. Export to a folder on this PC instead, like your Desktop or Documents.`;
+  }
+
   if (path.parse(resolved).root === resolved) {
     return `"${resolved}" is the top of a whole drive. Pick a folder inside it, like a "Games" folder on your Desktop.`;
   }
+
+  // Any drive's \Windows, \Program Files, … — not only C:\ (relative paths
+  // like ..\..\..\Windows from a D: checkout resolve to D:\Windows).
+  const relToRoot = path.relative(path.parse(resolved).root, resolved);
+  const top = relToRoot.split(/[\\/]/).filter(Boolean)[0] || "";
+  if (top && DRIVE_SYSTEM_DIRS.has(top.toLowerCase())) {
+    return `"${resolved}" is inside a Windows system folder (${top}). Pick somewhere personal instead, like your Desktop or Documents.`;
+  }
+
   for (const root of protectedRoots()) {
     const atRoot = resolved === root;
     if (atRoot || isWithin(resolved, root)) {
@@ -82,7 +140,7 @@ export function describeUnsafeDestination(dir) {
 export function resolveExportDestination(studioRoot, override) {
   const settings = loadSettings(studioRoot);
   const chosen = (override || settings.exportDestination || "").trim();
-  if (chosen) return path.resolve(chosen);
+  if (chosen) return normalizeDestinationPath(chosen);
   return path.join(studioRoot, "dist", "raw-projects");
 }
 
