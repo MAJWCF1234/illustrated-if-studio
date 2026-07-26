@@ -168,8 +168,20 @@ export class NovelEngine {
       e.preventDefault();
       const name = this.root.playerNameInput.value.trim();
       if (!name) return;
-      this.state.playerName = name;
-      this.persist( "playerName", name);
+      // Gate "Begin" is a new playthrough. Without a reset, Bob inherits Alice's
+      // abilities/history after a reload — gated choices appear unlocked early.
+      if (!this.previewMode) {
+        const cleared = clearPlaythrough(this.project.id, { keepAbilities: false });
+        this.state = { ...cleared, playerName: name, currentScene: this.startId };
+        this.persist("playerName", name);
+        this.persist("currentScene", this.startId);
+      } else {
+        this.state.playerName = name;
+        this.state.abilities = [];
+        this.state.vars = {};
+        this.state.history = [];
+        this.state.currentScene = this.startId;
+      }
       this.audio.unlock();
       this.enterNovel(this.startId);
     });

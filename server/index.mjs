@@ -2,7 +2,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { listImageFiles, readJson, writeJson, ensureDir, safeAssetFilename } from "./lib/fs-utils.mjs";
+import { listImageFiles, readJson, writeJson, ensureDir, safeAssetFilename, uniqueFilenameInDir } from "./lib/fs-utils.mjs";
 import { validateProject } from "./lib/validate.mjs";
 import { mergeTheme } from "./lib/theme-defaults.mjs";
 import {
@@ -355,7 +355,6 @@ async function handleApi(req, res, urlPath, searchParams) {
     const folder = body.folder === "characters" ? "characters" : "scene_images";
     const nameCheck = safeAssetFilename(body.filename);
     if (!nameCheck.ok) return sendJson(res, 400, { error: nameCheck.error });
-    const filename = nameCheck.filename;
     const dataUrl = String(body.dataBase64 || body.dataUrl || "");
     const m = dataUrl.match(/^data:([^;]+);base64,(.+)$/s) || (body.dataBase64 ? [null, null, body.dataBase64] : null);
     if (!m || !m[2]) return sendJson(res, 400, { error: "dataBase64 / dataUrl required" });
@@ -363,6 +362,11 @@ async function handleApi(req, res, urlPath, searchParams) {
     if (buf.length > 12 * 1024 * 1024) return sendJson(res, 400, { error: "File too large (max 12MB)" });
     const dir = safeProjectPath(`assets/${folder}`);
     ensureDir(dir);
+    // Never silently overwrite — beginners re-upload "photo.png" after a JPEG
+    // convert and would wipe the earlier art with no warning.
+    const unique = uniqueFilenameInDir(dir, nameCheck.filename);
+    if (!unique.ok) return sendJson(res, 400, { error: unique.error });
+    const filename = unique.filename;
     const outPath = path.join(dir, filename);
     // Belt-and-suspenders: resolved path must stay inside the chosen assets folder.
     const dirResolved = path.resolve(dir);
@@ -378,6 +382,8 @@ async function handleApi(req, res, urlPath, searchParams) {
       ok: true,
       folder,
       filename,
+      renamed: Boolean(unique.renamed),
+      requestedFilename: nameCheck.filename,
       path: outPath,
       url: `/projects/${getActiveProjectId()}/assets/${folder}/${encodeURIComponent(filename)}`,
       sceneImages: listImageFiles(safeProjectPath("assets/scene_images")),

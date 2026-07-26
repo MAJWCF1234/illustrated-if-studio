@@ -297,7 +297,12 @@ function renderList() {
     if (!(state.scenes[id].choices || []).length) li.classList.add("dead");
     if (inbound[id] === 0 && id !== state.startId) li.title = "Orphan scene";
     if (id === state.selected) li.classList.add("active");
-    li.addEventListener("click", () => selectScene(id));
+    // pointerdown selects before blur rebuilds the list, so the first click
+    // after editing story text is not swallowed.
+    li.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      selectScene(id);
+    });
     els.list.appendChild(li);
   }
   els.count.textContent = String(Object.keys(state.scenes).length);
@@ -427,7 +432,9 @@ function renderChoicesEditor(scene) {
       ${broken ? `<p class="action-broken">Broken or missing target</p>` : ""}
     `;
 
-    card.querySelector('[data-act="up"]').addEventListener("click", () => {
+    card.querySelector('[data-act="up"]').addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
       if (i === 0) return;
       const tmp = scene.choices[i - 1];
       scene.choices[i - 1] = scene.choices[i];
@@ -437,7 +444,9 @@ function renderChoicesEditor(scene) {
       graph.draw(state.scenes, state.startId);
       updateStats(scene);
     });
-    card.querySelector('[data-act="down"]').addEventListener("click", () => {
+    card.querySelector('[data-act="down"]').addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
       if (i >= scene.choices.length - 1) return;
       const tmp = scene.choices[i + 1];
       scene.choices[i + 1] = scene.choices[i];
@@ -447,7 +456,9 @@ function renderChoicesEditor(scene) {
       graph.draw(state.scenes, state.startId);
       updateStats(scene);
     });
-    card.querySelector('[data-act="del"]').addEventListener("click", () => {
+    card.querySelector('[data-act="del"]').addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
       scene.choices.splice(i, 1);
       markDirty("remove-choice");
       renderChoicesEditor(scene);
@@ -470,7 +481,8 @@ function renderChoicesEditor(scene) {
         graph.draw(state.scenes, state.startId);
         renderList();
         updateStats(scene);
-        renderChoicesEditor(scene);
+        // Avoid re-rendering the choice cards on every field blur — that
+        // destroys Delete/Reorder buttons mid-click after typing.
       });
     });
 
@@ -697,7 +709,9 @@ async function uploadAssetFile(file, folder = assetFolder) {
   state.assets.characters = data.characters || state.assets.characters;
   fillDatalist("scene-image-ids", state.assets.sceneImages || []);
   fillDatalist("character-ids", state.assets.characters || []);
-  if (prepared.resized) {
+  if (data.renamed && data.filename) {
+    toast(`Saved as ${data.filename} (name was already taken)`);
+  } else if (prepared.resized) {
     toast(`Optimized ${prepared.filename}${prepared.width ? ` (${prepared.width}×${prepared.height})` : ""}`);
   }
   return data;
@@ -788,7 +802,8 @@ function bindInspectorFields() {
     updateArtPreview(scene);
     els.heading.textContent = scene.speaker || state.selected;
     graph.draw(state.scenes, state.startId);
-    renderList();
+    // Do not renderList() here — blur+rebuild mid-click swallows the next
+    // scene-list click after typing in the inspector.
   };
 
   [els.fSpeaker, els.fBg, els.fLeft, els.fRight, els.fUnlock].forEach((el) => {

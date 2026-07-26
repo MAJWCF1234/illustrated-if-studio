@@ -148,6 +148,28 @@ export function safeAssetFilename(rawName, { maxLen = 120 } = {}) {
   return { ok: true, filename };
 }
 
+/** Pick filename, or filename-2 / filename-3… if that basename already exists. */
+export function uniqueFilenameInDir(dir, filename, { maxLen = 120 } = {}) {
+  const safe = safeAssetFilename(filename, { maxLen });
+  if (!safe.ok) return safe;
+  let candidate = safe.filename;
+  if (!fs.existsSync(path.join(dir, candidate))) return { ok: true, filename: candidate, renamed: false };
+  const stem = candidate.replace(/\.[^.]+$/, "");
+  const ext = candidate.slice(stem.length);
+  for (let n = 2; n < 1000; n++) {
+    candidate = `${stem}-${n}${ext}`;
+    if (candidate.length > maxLen) {
+      const trimStem = stem.slice(0, Math.max(1, maxLen - ext.length - String(n).length - 1));
+      candidate = `${trimStem}-${n}${ext}`;
+    }
+    if (!fs.existsSync(path.join(dir, candidate))) {
+      return { ok: true, filename: candidate, renamed: true };
+    }
+  }
+  candidate = `${stem}-${Date.now()}${ext}`;
+  return { ok: true, filename: candidate, renamed: true };
+}
+
 /** Strip controls / non-strings for package README labels. */
 export function safeLabel(value, fallback = "Untitled") {
   if (typeof value !== "string") {
