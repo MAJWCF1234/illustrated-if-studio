@@ -16,10 +16,10 @@ jobs:
           cache: npm
       - name: Install Node dependencies
         run: npm ci
-      - name: Validate + JS parity
-        run: npm run check
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
+      - name: Validate + JS parity
+        run: npm run check
       - name: Smoke exports (HTML/Python/C++ packages)
         run: npm run smoke
       - name: C++ export package shape
