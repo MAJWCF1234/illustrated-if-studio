@@ -52,6 +52,7 @@
     "test:editor-resilience": "node scripts/editor-resilience-smoke.mjs",
     "test:playthrough-ux": "node scripts/playthrough-ux-smoke.mjs",
     "test:editor-ux2": "node scripts/editor-ux2-smoke.mjs",
+    "test:story-safety": "node scripts/story-safety-smoke.mjs",
     "test:cpp": "node scripts/cpp-parity-smoke.mjs",
     "test:play-wiz": "node scripts/play-wizard-smoke.mjs",
     "build:python-exe": "node scripts/build-python-exe.mjs",

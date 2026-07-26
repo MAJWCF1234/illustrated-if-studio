@@ -160,9 +160,15 @@ function connectScenes(fromId, toId) {
   const scene = state.scenes[fromId];
   if (!scene || !state.scenes[toId]) return;
   scene.choices = scene.choices || [];
-  const dangling = scene.choices.find((c) => !c.next || !state.scenes[c.next]);
-  if (dangling) dangling.next = toId;
-  else scene.choices.push({ text: `Go to ${toId}`, next: toId });
+  if (scene.choices.some((choice) => choice.next === toId)) {
+    toast(`${fromId} already links to ${toId}`);
+    return;
+  }
+  if (!confirm(`Add a player choice from "${fromId}" to "${toId}"?`)) {
+    toast("Link cancelled");
+    return;
+  }
+  scene.choices.push({ text: `Go to ${toId}`, next: toId });
   markDirty("connect");
   selectScene(fromId);
   graph.draw(state.scenes, state.startId);
@@ -418,10 +424,10 @@ function renderChoicesEditor(scene) {
     card.className = "action-card";
     const broken = !c.next || !state.scenes[c.next];
     const placeholder = broken
-      ? `<option value="${escapeAttr(c.next || "")}" selected>${
-          c.next ? `${escapeAttr(c.next)} (missing)` : "(no scene chosen)"
+      ? `<option value="${escapeAttr(c.next || "")}" selected disabled>${
+          c.next ? `${escapeAttr(c.next)} (missing - choose a real scene)` : "(choose a real scene)"
         }</option>`
-      : `<option value="" ${!c.next ? "selected" : ""}>(clear / pick a scene)</option>`;
+      : "";
     const options = ids
       .map((id) => `<option value="${escapeAttr(id)}" ${!broken && c.next === id ? "selected" : ""}>${escapeAttr(id)}</option>`)
       .join("");
@@ -473,6 +479,10 @@ function renderChoicesEditor(scene) {
     card.querySelector('[data-act="del"]').addEventListener("pointerdown", (e) => {
       if (e.button !== 0) return;
       e.preventDefault();
+      if (scene.id === state.startId && scene.choices.length <= 1) {
+        toast("The start scene needs at least one action so the game can begin");
+        return;
+      }
       scene.choices.splice(i, 1);
       markDirty("remove-choice");
       renderChoicesEditor(scene);
@@ -488,6 +498,22 @@ function renderChoicesEditor(scene) {
           const v = input.value.trim();
           if (v) c.when = { hasAbility: v };
           else delete c.when;
+        } else if (k === "next") {
+          const next = input.value;
+          if (!next || !state.scenes[next]) {
+            input.value = c.next || "";
+            toast("Pick an existing scene. Links cannot be left broken.");
+            return;
+          }
+          c.next = next;
+        } else if (k === "text") {
+          const text = input.value.trim();
+          if (!text) {
+            input.value = c.text || "Continue";
+            toast("An action needs words for the player to click");
+            return;
+          }
+          c.text = text;
         } else {
           c[k] = input.value;
         }
@@ -1302,18 +1328,13 @@ document.getElementById("btn-delete").addEventListener("click", () => {
   }
   const inbound = collectInbound(state.scenes);
   const n = inbound[id] || 0;
-  const warn =
-    n > 0
-      ? `\n\n${n} other action${n === 1 ? "" : "s"} point here — those links will break until you fix them.`
-      : "";
-  if (!confirm(`Delete scene "${id}"?${warn}`)) return;
+  if (n > 0) {
+    toast(`Can't delete ${id}: ${n} action${n === 1 ? "" : "s"} still lead there. Remove those links first.`);
+    return;
+  }
+  if (!confirm(`Delete scene "${id}"? You can undo this immediately if needed.`)) return;
   delete state.scenes[id];
   delete graph.positions[id];
-  for (const sc of Object.values(state.scenes)) {
-    for (const c of sc.choices || []) {
-      if (c.next === id) c.next = "";
-    }
-  }
   markDirty("delete");
   state.selected = state.startId;
   renderList();
