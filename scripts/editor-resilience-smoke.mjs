@@ -18,6 +18,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const BASE = process.env.STUDIO_URL || "http://127.0.0.1:8787";
+const customExportDir = path.join(root, "dist", "zz-resilience-custom-export");
 const bugs = [];
 const bug = (m) => {
   bugs.push(m);
@@ -62,6 +63,7 @@ async function cleanupScratch() {
   for (const id of ["true", "zz-resilience-smoke", "zz-broken-switch"]) {
     fs.rmSync(path.join(root, "projects", id), { recursive: true, force: true });
   }
+  fs.rmSync(customExportDir, { recursive: true, force: true });
   await req("PUT", "/api/settings", { activeProjectId: "sample-project" });
 }
 
@@ -70,6 +72,23 @@ async function main() {
   if (health.status !== 200) throw new Error("Studio down — start node server/index.mjs");
 
   await cleanupScratch();
+
+  // Custom export folders are on the user's filesystem, not the HTTP download
+  // directory. Returning the generic URL can download a stale ZIP with the
+  // same filename from dist/ instead.
+  const customExport = await req("POST", "/api/export", {
+    target: "html",
+    destination: customExportDir,
+  });
+  if (customExport.status !== 200 || !customExport.data?.ok) {
+    bug(`custom export failed: ${customExport.status} ${customExport.text?.slice(0, 120)}`);
+  } else if (customExport.data.downloadUrl) {
+    bug(`custom export exposed default download URL: ${customExport.data.downloadUrl}`);
+  } else if (!fs.existsSync(customExport.data.zip)) {
+    bug(`custom export ZIP is missing: ${customExport.data.zip}`);
+  } else {
+    ok("custom export reports its folder without a misleading download URL");
+  }
 
   // ── 413 JSON for oversized body ─────────────────────────────
   const huge = "x".repeat(9 * 1024 * 1024);

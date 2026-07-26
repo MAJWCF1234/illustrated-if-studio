@@ -254,7 +254,10 @@ function formatExportResult(result) {
     folderRel: result.folder ? publicPath(result.folder) : null,
     output: lines.join("\n"),
   };
-  if (result.zip) {
+  // The download endpoint serves only ZIPs placed directly in dist/. A custom
+  // destination may contain an identically named archive, so never point it at
+  // the default copy (which could be stale or from a different export).
+  if (result.zip && path.resolve(path.dirname(result.zip)) === path.resolve(outRoot)) {
     out.zipRel = publicPath(result.zip);
     out.downloadUrl = `/api/download?file=${encodeURIComponent(path.basename(result.zip))}`;
   }
