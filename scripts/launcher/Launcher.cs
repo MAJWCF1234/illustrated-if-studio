@@ -662,9 +662,9 @@ namespace IllustratedIf
         {
             try
             {
-                Setup.OfferExportToolsOnce();
                 Studio.Launch();
                 Close();
+                Setup.OfferExportToolsOnce();
             }
             catch (Exception ex)
             {
@@ -994,8 +994,11 @@ namespace IllustratedIf
 
             if (!forceWizard && Studio.ElectronReady())
             {
-                Setup.OfferExportToolsOnce();
                 Application.Run(new SplashForm());
+                // Ask about optional sharing tools only once the studio is actually up. A
+                // first-ever double-click should open the studio, not a question about C++
+                // build tools.
+                if (Studio.StudioAnswering()) Setup.OfferExportToolsOnce();
                 return;
             }
 

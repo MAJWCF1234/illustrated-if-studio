@@ -18,13 +18,32 @@ npm start
 ### Desktop app (Electron)
 
 Friendly launcher (what you hand to a non-coder): double-click **`Illustrated IF Studio`**
-(the `.exe` in the root). It starts the studio quietly (no console window) and opens the
-Electron editor. Backup: `tools\emergency\Start the studio (backup).vbs`.
+(the `.exe` in the root). No console window ever appears — it shows a small splash, boots the
+server, and opens the Electron editor. Backup: `tools\emergency\Start the studio (backup).vbs`.
 
 For development: `npm run electron`, or the manual/debug launcher `tools\emergency\RUN-EDITOR.bat`
 (shows a console + errors; options `-ReuseServer`, `-Headless`, `-Port 8790`).
 
-Electron is installed on first launch if it isn't already in `node_modules/`.
+**When `node_modules/electron` is present, nothing else is needed — not even Node.** Electron
+ships its own Node, and `electron/main.mjs` falls back to `process.execPath` with
+`ELECTRON_RUN_AS_NODE=1` to run the server. That is what makes a bundled hand-off zip
+install-free. Without it, the launcher installs Node (one UAC prompt) and downloads Electron.
+
+#### Rebuilding the launcher
+
+```bash
+npm run build:launcher     # -> "Illustrated IF Studio.exe" in the root
+```
+
+Source: `scripts/launcher/Launcher.cs` (+ `app.manifest`), compiled by
+`scripts/build-launcher.mjs` with the .NET Framework `csc.exe` built into Windows — no SDK,
+no runtime for the recipient, and the icon is generated from the same void-violet mark as the
+Electron window. Commit the rebuilt `.exe`; it is what ships in the zip. Language level is
+**C# 5**, so no interpolated strings / `?.` / `nameof` in that file.
+
+Useful while working on it: `--wizard`, `--simulate-no-node`, `--simulate-no-electron` force
+the first-run screens without touching what's installed. Every run writes
+`tools/logs/last-startup.txt`.
 
 Editor tabs: **Story** · **Design** · **Projects** (New / Open / import / raw export destination) · **CLI**.
 
@@ -49,8 +68,14 @@ npm run test:locale
 npm run test:layout
 npm run test:python-saves
 npm run test:electron
+npm run check:windows                      # .bat/.ps1/.vbs are ASCII-only and still parse
 npm run build:python-exe -- --skip-build   # export Python package (+ BUILD-EXE.bat)
 ```
+
+> `check:windows` is not cosmetic. `powershell.exe` 5.1 reads a BOM-less `.ps1` as
+> Windows-1252, so a UTF-8 em dash becomes `â€"` — that trailing byte is a smart quote, it
+> closes the string early, and the script dies with a parse error. Keep launcher and setup
+> scripts ASCII; `--fix` rewrites the typography for you.
 
 ## Send it to someone who can't code (hand-off zip)
 
@@ -75,13 +100,22 @@ Output: `dist/illustrated-if-studio-handoff-YYYY-MM-DD.zip` (script lives in
 2. Double-click **`Illustrated IF Studio`** (the `.exe` in the root).
 3. Make their game. The window opens straight into the studio with `sample-project` loaded.
 
-**First-run install, handled quietly:** the launcher starts with **no visible console**.
-If Node.js is missing it shows a friendly pop-up ("Windows needs permission to finish
-installing…"), triggers the emergency setup once (UAC + winget, needs internet), then
-opens the studio. If Electron isn't bundled it fetches it once with a "getting ready…"
-pop-up. After Node is ready it may ask once: **also install tools for sharing games?**
-(Python / C++). No is fine — studio + HTML playtest still work; each export zip can
-install later. No wall of terminal text, and it never leaves them staring at a `cmd` prompt.
+**A bundled zip installs nothing.** `node_modules/electron` is all the studio needs, so the
+default `npm run package:handoff` output goes unzip → double-click → studio window. No UAC,
+no network, no prompts.
+
+**If pieces are missing** (only with `--no-node-modules`, or a half-copied folder), the `.exe`
+opens a plain-language wizard instead of the studio: what it needs, one big button, "Windows
+may ask permission — click Yes", then an "Open the Studio" button. Progress is a marquee bar
+with friendly sentences; raw `npm` / `winget` output goes to `tools/logs/last-startup.txt`,
+never to the screen. Errors offer **Try again** and **Show the details**.
+
+**Ordering matters on a first launch.** The one-time "also install tools for sharing games?"
+question (Python / C++) is asked *after* the studio window is up, never before it — a
+first-ever double-click should open the studio, not a question about C++ build tools. Saying
+No is fine; every export zip installs its own prerequisites on first play, and
+`tools\emergency\SETUP-EXPORT-TOOLS.bat` can do it later. The marker
+`tools/.export-tools-offered` means it never asks twice.
 
 The scary developer scripts (`SETUP-ADMIN.*`, `SETUP-EXPORT-TOOLS.*`, manual `RUN-EDITOR.*`)
 live out of sight in **`tools/emergency/`** with a plain-language `README.txt`.
