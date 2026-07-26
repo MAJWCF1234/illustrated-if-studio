@@ -65,6 +65,16 @@ async function main() {
   }
   console.log("Title:", title.trim());
 
+  // Preview mode must also clear Loading… (editor live-preview skips the gate).
+  if (new URL(base, "http://local/").searchParams.get("preview") === "1") {
+    await page.waitForSelector("#novel:not([hidden])", { timeout: 10000 });
+    const story = await page.locator("#story-text").innerText();
+    if (!story.trim()) throw new Error("Preview mode: story empty");
+    console.log("Preview story OK:", story.trim().slice(0, 80).replace(/\s+/g, " "));
+    await browser.close();
+    return;
+  }
+
   // Name gate
   const gate = page.locator("#gate");
   if (await gate.isVisible()) {

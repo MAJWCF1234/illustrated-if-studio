@@ -128,6 +128,8 @@ async function main() {
 
     if (preview) {
       // Skip gate; jump straight into a scene for editor live preview (does not touch saves).
+      // Still apply chrome so the header is not stuck on the static "Loading…" placeholder.
+      engine.applyChrome();
       engine.state.playerName = previewName;
       engine.root.playerNameInput.value = previewName;
       engine.root.gate.hidden = true;

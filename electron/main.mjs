@@ -289,6 +289,25 @@ async function createWindow(health) {
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    // Keep Play / engine-html inside the studio shell (no system browser).
+    // External http(s) links still open in the default browser.
+    try {
+      const target = new URL(url);
+      const origin = new URL(baseUrl).origin;
+      if (target.origin === origin && target.pathname.startsWith("/engine-html")) {
+        const win = new BrowserWindow({
+          width: 1100,
+          height: 720,
+          title: "Illustrated IF — Play",
+          backgroundColor: "#050208",
+          webPreferences: { contextIsolation: true, nodeIntegration: false },
+        });
+        win.loadURL(url);
+        return { action: "deny" };
+      }
+    } catch {
+      /* fall through */
+    }
     shell.openExternal(url);
     return { action: "deny" };
   });

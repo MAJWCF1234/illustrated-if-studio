@@ -560,7 +560,8 @@ export class NovelEngine {
     }
   }
 
-  bootGate() {
+  /** Title / byline / brand rail — used by gate and by editor live-preview. */
+  applyChrome() {
     this.root.gameTitle.textContent = this.project.title || "Untitled";
     this.root.gameAuthor.textContent = this.project.author ? `Game by ${this.project.author}` : "";
     if (this.root.brandMark) {
@@ -569,6 +570,10 @@ export class NovelEngine {
     if (this.root.gameAuthor) {
       this.root.gameAuthor.hidden = document.body.dataset.showByline === "0" || !this.project.author;
     }
+  }
+
+  bootGate() {
+    this.applyChrome();
     this.root.gate.hidden = false;
     this.root.novel.hidden = true;
     if (this.state.playerName) {
