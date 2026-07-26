@@ -27,7 +27,14 @@ export function applySnapshot(state, save) {
   state.currentScene = s.currentScene || "start";
   state.abilities = Array.isArray(s.abilities) ? s.abilities.filter((a) => typeof a === "string") : [];
   state.vars = isPlainObject(s.vars) ? { ...s.vars } : {};
-  state.history = Array.isArray(s.history) ? s.history.filter((h) => isPlainObject(h)) : [];
+  state.history = Array.isArray(s.history)
+    ? s.history
+        .filter((h) => isPlainObject(h) && typeof h.id === "string" && h.id.length)
+        .map((h) => ({
+          id: h.id,
+          choice: typeof h.choice === "string" && h.choice.length ? h.choice : null,
+        }))
+    : [];
 }
 
 function lsKey(projectId, slot) {

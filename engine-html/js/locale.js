@@ -89,7 +89,9 @@ export class LocaleTables {
 
   overlayFor(localeId = this.localeId) {
     if (!localeId || localeId === this.defaultId) return null;
-    return this.tables[localeId] || null;
+    const table = this.tables[localeId];
+    if (!table || typeof table !== "object" || Array.isArray(table)) return null;
+    return table;
   }
 
   /**

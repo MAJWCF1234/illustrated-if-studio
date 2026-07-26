@@ -73,6 +73,12 @@ function toast(msg) {
 }
 
 function showLog(title, body) {
+  // Native <dialog> is top-layer; an open Export menu behind it is confusing and
+  // lets scripted/keyboard paths replace Validate output mid-read.
+  const dd = document.getElementById("export-dropdown");
+  const btn = document.getElementById("btn-export");
+  if (dd) dd.hidden = true;
+  if (btn) btn.setAttribute("aria-expanded", "false");
   els.logTitle.textContent = title;
   els.logBody.textContent = body;
   els.logDialog.showModal();
@@ -843,6 +849,7 @@ async function saveProject() {
   if (saveInFlight) return saveInFlight;
   saveInFlight = (async () => {
     flushInspectorToState();
+    designApi?.flush?.();
     const scenesRes = await fetch("/api/scenes", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -1034,6 +1041,8 @@ function previewUrl(sceneId) {
 
 async function openPreview(sceneId) {
   els.previewDock.hidden = false;
+  // Design font/number fields may have typed values not yet in state.theme.
+  designApi?.flush?.();
   const ok = state.dirty ? await saveProject() : true;
   if (!ok) return;
   els.previewFrame.src = previewUrl(sceneId);
@@ -1133,6 +1142,11 @@ function closeExportMenu() {
 
 exportBtn.addEventListener("click", (e) => {
   e.stopPropagation();
+  if (els.logDialog?.open) {
+    closeExportMenu();
+    toast("Close the dialog first");
+    return;
+  }
   const open = exportDropdown.hidden;
   exportDropdown.hidden = !open;
   exportBtn.setAttribute("aria-expanded", open ? "true" : "false");
@@ -1204,7 +1218,14 @@ async function runExport(target) {
 }
 
 exportDropdown.querySelectorAll("[data-export]").forEach((btn) => {
-  btn.addEventListener("click", () => runExport(btn.dataset.export));
+  btn.addEventListener("click", () => {
+    if (els.logDialog?.open) {
+      closeExportMenu();
+      toast("Close the dialog first");
+      return;
+    }
+    runExport(btn.dataset.export);
+  });
 });
 document.getElementById("btn-fit").addEventListener("click", () => graph.fit());
 document.getElementById("btn-auto").addEventListener("click", () => {
@@ -1374,9 +1395,17 @@ document.getElementById("btn-proj-save-dest").addEventListener("click", async ()
   });
   const data = await res.json();
   if (!res.ok) {
+    // Keep the field from looking "saved" when the server rejected an unsafe path.
+    try {
+      const cur = await (await fetch("/api/settings")).json();
+      document.getElementById("proj-export-dest").value = cur.exportDestination || "";
+    } catch {
+      /* ignore */
+    }
     showLog("Settings failed", data.error || "");
     return;
   }
+  document.getElementById("proj-export-dest").value = data.settings?.exportDestination || "";
   toast("Export destination saved");
   showLog(
     "Destination saved",

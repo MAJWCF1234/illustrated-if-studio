@@ -106,9 +106,9 @@ export class NovelEngine {
     if (c.frame) r.setProperty("--frame", c.frame);
     if (c.choice) r.setProperty("--choice", c.choice);
     if (c.choiceHover) r.setProperty("--choice-hover", c.choiceHover);
-    if (f.display) r.setProperty("--font-display", `"${f.display}", Georgia, serif`);
-    if (f.ui) r.setProperty("--font-ui", `"${f.ui}", Georgia, serif`);
-    if (f.body) r.setProperty("--font-body", `"${f.body}", Georgia, serif`);
+    if (f.display) r.setProperty("--font-display", cssFontStack(f.display, "Georgia, serif"));
+    if (f.ui) r.setProperty("--font-ui", cssFontStack(f.ui, "Georgia, serif"));
+    if (f.body) r.setProperty("--font-body", cssFontStack(f.body, "Georgia, serif"));
     // Out-of-range numbers are dropped rather than passed through: a negative
     // gameHeight collapsed the whole game frame to 0px, so the story loaded but
     // nothing was on screen and nothing was logged.
@@ -351,8 +351,24 @@ export class NovelEngine {
     }
   }
 
+  /** Drop null / non-object / id-less history entries so nav never throws. */
+  sanitizeHistory(persist = true) {
+    const raw = this.state.history;
+    const list = Array.isArray(raw) ? raw : [];
+    const cleaned = list
+      .filter((h) => h && typeof h === "object" && typeof h.id === "string" && h.id.length)
+      .map((h) => ({
+        id: h.id,
+        choice: typeof h.choice === "string" && h.choice.length ? h.choice : null,
+      }));
+    const changed = cleaned.length !== list.length || !Array.isArray(raw);
+    this.state.history = cleaned;
+    if (persist && changed) this.persist("history", cleaned);
+    return cleaned;
+  }
+
   canRollback() {
-    return Array.isArray(this.state.history) && this.state.history.length > 1;
+    return this.sanitizeHistory().length > 1;
   }
 
   rememberChoice(sceneId, choiceText) {
@@ -382,6 +398,11 @@ export class NovelEngine {
     this.state.history.pop();
     const prev = this.state.history[this.state.history.length - 1];
     this.persist("history", this.state.history);
+    if (!prev?.id) {
+      this.toast("Nothing to roll back");
+      this.updateNavButtons();
+      return false;
+    }
     this._suppressSkipOnce = true;
     this.showScene(prev.id, prev.choice || null, { recordHistory: false });
     this.toast("Rolled back");
@@ -753,10 +774,13 @@ export class NovelEngine {
   }
 
   pushHistory(id, choice) {
+    if (!id || typeof id !== "string") return;
+    this.sanitizeHistory();
     const last = this.state.history[this.state.history.length - 1];
-    if (!last || last.id !== id || last.choice !== choice) {
-      this.state.history.push({ id, choice: choice || null });
-      this.persist( "history", this.state.history);
+    const choiceVal = typeof choice === "string" && choice.length ? choice : null;
+    if (!last || last.id !== id || last.choice !== choiceVal) {
+      this.state.history.push({ id, choice: choiceVal });
+      this.persist("history", this.state.history);
     }
   }
 
@@ -896,6 +920,8 @@ export class NovelEngine {
 
   showHistory() {
     this._mode = "history";
+    this.clearSkipTimer();
+    this.sanitizeHistory();
     this.root.speaker.hidden = true;
     this.setSprite(this.root.spriteLeft, null);
     this.setSprite(this.root.spriteRight, null);
@@ -905,6 +931,7 @@ export class NovelEngine {
     box.innerHTML = "";
 
     this.state.history.forEach((entry, index) => {
+      if (!entry?.id) return;
       const scene = this.scenes[entry.id];
       if (!scene) return;
       const item = document.createElement("div");
@@ -1013,4 +1040,12 @@ export class NovelEngine {
     this.root.novel.hidden = true;
     this.root.gate.hidden = false;
   }
+}
+
+/** Font family names for CSS vars — reject quotes / semicolons that break out of the stack. */
+function cssFontStack(name, fallback) {
+  const v = String(name ?? "").trim();
+  if (!v || v.length > 80) return fallback;
+  if (!/^[\w\s.,%-]+$/u.test(v) || /url\s*\(/i.test(v)) return fallback;
+  return `"${v}", ${fallback}`;
 }

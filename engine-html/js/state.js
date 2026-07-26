@@ -27,12 +27,21 @@ export function loadState(projectId, defaults = {}) {
     }
   };
   const isPlainObject = (v) => Boolean(v) && typeof v === "object" && !Array.isArray(v);
+  // History must be [{id, choice?}…] — null / string / number entries used to
+  // crash showHistory (`entry.id`) and rollback (`prev.id`) on click.
+  const rawHistory = read("history", [], Array.isArray);
+  const history = rawHistory
+    .filter((h) => isPlainObject(h) && typeof h.id === "string" && h.id.length)
+    .map((h) => ({
+      id: h.id,
+      choice: typeof h.choice === "string" && h.choice.length ? h.choice : null,
+    }));
   return {
     playerName: readRaw(projectId, "playerName") || "",
     currentScene: readRaw(projectId, "currentScene") || defaults.start || "start",
     abilities: read("abilities", [], Array.isArray),
     vars: read("vars", {}, isPlainObject),
-    history: read("history", [], Array.isArray),
+    history,
   };
 }
 

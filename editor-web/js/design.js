@@ -113,12 +113,16 @@ export function mountDesignStudio(root, api) {
       });
     });
     colorsEl.querySelectorAll("[data-font]").forEach((input) => {
-      input.addEventListener("change", () => {
+      const commit = () => {
         const key = input.dataset.font;
         patch((t) => {
           t.fonts[key] = input.value.trim() || DEFAULT_THEME.fonts[key];
         });
-      });
+      };
+      // `input` keeps live preview + dirty in sync while typing; Ctrl+S / Preview
+      // must not persist a stale theme while the field still shows the new value.
+      input.addEventListener("input", commit);
+      input.addEventListener("change", commit);
     });
   }
 
@@ -169,14 +173,17 @@ export function mountDesignStudio(root, api) {
       });
     });
     sceneEl.querySelectorAll("[data-scene-num]").forEach((el) => {
-      el.addEventListener("change", () => {
+      const commit = () => {
         const key = el.dataset.sceneNum;
         const val = Number(el.value);
+        if (!Number.isFinite(val)) return;
         patch((t) => {
           t.templates.scene[key] = val;
           if (key === "artRatio") t.layout.artRatio = val;
         });
-      });
+      };
+      el.addEventListener("input", commit);
+      el.addEventListener("change", commit);
     });
     sceneEl.querySelectorAll("[data-scene-bool]").forEach((el) => {
       el.addEventListener("change", () => {
@@ -378,9 +385,44 @@ export function mountDesignStudio(root, api) {
     renderPreview();
   }
 
+  /** Push current control values into theme state (Save / Preview / Export). */
+  function flush() {
+    colorsEl.querySelectorAll("[data-font]").forEach((input) => {
+      const key = input.dataset.font;
+      const next = input.value.trim() || DEFAULT_THEME.fonts[key];
+      if (theme().fonts[key] !== next) {
+        patch((t) => {
+          t.fonts[key] = next;
+        });
+      }
+    });
+    colorsEl.querySelectorAll("[data-color-hex]").forEach((input) => {
+      const key = input.dataset.colorHex;
+      let v = input.value.trim();
+      if (!/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v)) return;
+      if (v.length === 4) v = `#${v[1]}${v[1]}${v[2]}${v[2]}${v[3]}${v[3]}`;
+      if (theme().colors[key] !== v) {
+        patch((t) => {
+          t.colors[key] = v;
+        });
+      }
+    });
+    sceneEl.querySelectorAll("[data-scene-num]").forEach((el) => {
+      const key = el.dataset.sceneNum;
+      const val = Number(el.value);
+      if (!Number.isFinite(val)) return;
+      if (theme().templates.scene[key] !== val) {
+        patch((t) => {
+          t.templates.scene[key] = val;
+          if (key === "artRatio") t.layout.artRatio = val;
+        });
+      }
+    });
+  }
+
   renderAll();
 
-  return { refresh: renderAll };
+  return { refresh: renderAll, flush };
 }
 
 function mapValues(obj, fn) {

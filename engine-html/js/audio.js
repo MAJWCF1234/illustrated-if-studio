@@ -101,13 +101,24 @@ export class AudioChannels {
   }
 
   _applyVolumes() {
+    // HTMLMediaElement.volume throws if the value is non-finite — keep channels
+    // clamped even if prefs/theme were poisoned after construction.
+    this.volumes.bgm = clamp01(this.volumes.bgm, 0.55);
+    this.volumes.sfx = clamp01(this.volumes.sfx, 0.75);
     const master = this.muted || !this.enabled ? 0 : 1;
-    if (this._bgm) this._bgm.volume = this.volumes.bgm * master;
+    if (this._bgm) {
+      try {
+        this._bgm.volume = this.volumes.bgm * master;
+      } catch {
+        /* ignore */
+      }
+    }
   }
 
   _effectiveVolume(channel) {
     if (this.muted || !this.enabled) return 0;
-    return this.volumes[channel] ?? 0;
+    const fallback = channel === "sfx" ? 0.75 : 0.55;
+    return clamp01(this.volumes[channel], fallback);
   }
 
   status() {
