@@ -2,7 +2,7 @@
 setlocal
 cd /d "%~dp0"
 
-REM Illustrated IF Studio — desktop editor (Electron)
+REM Illustrated IF Studio - desktop editor (Electron)
 REM Usage:
 REM   RUN-EDITOR.bat
 REM   RUN-EDITOR.bat -ReuseServer

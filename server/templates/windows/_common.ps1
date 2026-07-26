@@ -1,4 +1,4 @@
-# Illustrated IF — shared Windows elevate + winget helpers
+# Illustrated IF - shared Windows elevate + winget helpers
 # Dot-source from package setup scripts.
 
 function Test-IsAdmin {
@@ -10,7 +10,7 @@ function Test-IsAdmin {
 function Request-AdminElevation {
   param([string]$ScriptPath = $PSCommandPath, [string[]]$ArgumentList = @())
   if (Test-IsAdmin) { return $false }
-  Write-Host "Requesting Administrator elevation…" -ForegroundColor Yellow
+  Write-Host "Requesting Administrator elevation..." -ForegroundColor Yellow
   $args = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$ScriptPath`"") + $ArgumentList
   Start-Process -FilePath "powershell.exe" -Verb RunAs -ArgumentList $args | Out-Null
   return $true
@@ -28,7 +28,7 @@ function Install-WingetPackage {
     [string]$Name = $Id
   )
   if (-not (Ensure-Winget)) { throw "winget missing" }
-  Write-Host "Installing $Name ($Id)…" -ForegroundColor Cyan
+  Write-Host "Installing $Name ($Id)..." -ForegroundColor Cyan
   & winget install --id $Id -e --accept-package-agreements --accept-source-agreements --disable-interactivity
   if ($LASTEXITCODE -notin 0, -1978335189) {
     # -1978335189 = already installed (newer winget)
@@ -46,6 +46,6 @@ function Write-Done {
   param([string]$Message)
   Write-Host ""
   Write-Host $Message -ForegroundColor Green
-  Write-Host "Press Enter to close…"
+  Write-Host "Press Enter to close..."
   [void][Console]::ReadLine()
 }

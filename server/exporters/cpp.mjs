@@ -963,14 +963,19 @@ C++ source package for an **illustrated text-based RPG** — a real **graphical*
 player built with [raylib](https://www.raylib.com/).
 
 ${author ? `by ${author}\n\n` : ""}
-## Windows — first time (no coding needed)
+## Windows — just play (no coding needed)
 
-1. Double-click \`SETUP-ADMIN.bat\` (approve the UAC prompt) — installs **Git**,
-   **CMake**, and **VS 2022 Build Tools (C++)** via winget if they're missing.
-2. Double-click \`PLAY.bat\` — configures, builds (Release), and launches the game.
+1. Double-click **\`Play the Game\`**.
+2. The first time, it may ask to install build tools (**Git**, **CMake**,
+   **VS 2022 Build Tools**). That download can be **large** and take a while —
+   you'll need the internet and a YES on the Windows permission prompt.
+3. Then it configures, builds (Release), and launches the game.
 
-The **first** build downloads and compiles raylib + nlohmann/json from source,
-so it can take a few minutes. After that, launches are fast.
+The **first** build also downloads and compiles raylib + nlohmann/json from
+source (a few more minutes). Later launches are fast.
+
+If setup fails, open \`_emergency\` and run \`SETUP-ADMIN.bat\`, then try again.
+Technical: \`PLAY.bat\` does the same with a visible console.
 
 ## Build (manual)
 
@@ -1041,6 +1046,20 @@ export function exportCpp({ studioRoot, projectDir, outRoot }) {
   fs.writeFileSync(path.join(staging, "src", "saves.cpp"), SAVES_CPP);
   fs.writeFileSync(path.join(staging, "src", "main.cpp"), MAIN_CPP);
   fs.writeFileSync(path.join(staging, "README.md"), README(project.title || slug, project.author || ""));
+  fs.writeFileSync(
+    path.join(staging, "README.txt"),
+    `${project.title || slug}
+
+How to play (Windows)
+---------------------
+1. Double-click:  Play the Game
+2. First time may install build tools (LARGE download; can take a while) —
+   click YES when Windows asks, stay online, then wait for the build.
+3. The game window opens. Later plays are much faster.
+
+If something goes wrong: open _emergency and read README.txt.
+`
+  );
   fs.writeFileSync(path.join(staging, "build.bat"), `@echo off\r\ncall "%~dp0PLAY.bat"\r\n`);
 
   copyDir(projectDir, path.join(staging, "project"), {

@@ -33,20 +33,21 @@ by ${project.author || "Unknown"}
 
 Illustrated text-based RPG (HTML package)
 
-First time (Windows)
---------------------
-1. Right-click SETUP-ADMIN.bat → Run as administrator
-   (or double-click — it will request UAC elevation)
-2. It installs Node.js LTS via winget if missing
+How to play (Windows)
+---------------------
+1. Double-click:  Play the Game
+2. Your browser opens the game.
 
-Play
-----
-1. Double-click PLAY.bat
-2. Browser opens http://127.0.0.1:8080/
+The first time, Windows may ask for permission to install a small helper
+(Node.js) if it isn't already on this PC. Click YES — it needs the internet
+once. After that, play is instant.
 
-Manual: node start-server.mjs
+Do not open index.html by itself (file://) — browsers block the game data.
 
-Do not open index.html via file:// — browsers block local JSON fetch.
+If something goes wrong
+-----------------------
+Open the _emergency folder and read README.txt. Technical PLAY.bat is also
+in this folder if you need a black console for debugging.
 `
   );
 

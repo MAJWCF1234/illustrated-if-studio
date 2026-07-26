@@ -1,18 +1,23 @@
-# SETUP-ADMIN.ps1 — HTML package prerequisites (Node.js)
-# Elevates to Administrator, installs Node LTS via winget, then can launch the game.
+# SETUP-ADMIN.ps1 - HTML package prerequisites (Node.js)
+# Lives in _emergency\; package root is the parent folder.
 
 param([switch]$Launch)
 
 $ErrorActionPreference = "Stop"
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
+$pkgRoot = Split-Path -Parent $here
+if (-not (Test-Path (Join-Path $pkgRoot "start-server.mjs"))) {
+  # Older layout: scripts at package root
+  if (Test-Path (Join-Path $here "start-server.mjs")) { $pkgRoot = $here }
+}
 . (Join-Path $here "_common.ps1")
 
 if (Request-AdminElevation -ScriptPath $MyInvocation.MyCommand.Path -ArgumentList @($(if ($Launch) { "-Launch" }))) {
   exit 0
 }
 
-Write-Host "=== Illustrated IF — HTML package setup (Admin) ===" -ForegroundColor Cyan
-Write-Host "Folder: $here"
+Write-Host "=== Illustrated IF - HTML package setup (Admin) ===" -ForegroundColor Cyan
+Write-Host "Package: $pkgRoot"
 
 $nodeOk = $false
 try {
@@ -31,16 +36,17 @@ if (-not $nodeOk) {
   Write-Host "Installed Node: $v"
 }
 
-$marker = Join-Path $here ".prereqs-ok"
+$marker = Join-Path $pkgRoot ".prereqs-ok"
 Set-Content -Path $marker -Value "node=$(node -v)`n$(Get-Date -Format o)" -Encoding utf8
 
 Write-Host ""
 Write-Host "Prerequisites ready." -ForegroundColor Green
-Write-Host "Play: double-click PLAY.bat  or  run start-server.bat"
-Write-Host "      Then open the URL shown in the terminal."
+Write-Host "Play: double-click ""Play the Game""  (or PLAY.bat)"
 
 if ($Launch) {
-  Start-Process -FilePath (Join-Path $here "PLAY.bat")
+  $vbs = Join-Path $pkgRoot "Play the Game.vbs"
+  if (Test-Path $vbs) { Start-Process -FilePath $vbs }
+  else { Start-Process -FilePath (Join-Path $pkgRoot "PLAY.bat") }
 }
 
 Write-Done "HTML setup complete."

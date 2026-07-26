@@ -1,18 +1,22 @@
-# SETUP-ADMIN.ps1 — C++ / CMake package prerequisites
-# Elevates to Administrator; installs Git, CMake, and VS Build Tools (C++).
+# SETUP-ADMIN.ps1 - C++ / CMake package prerequisites
+# Lives in _emergency\; package root is the parent folder.
 
 param([switch]$Launch)
 
 $ErrorActionPreference = "Stop"
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
+$pkgRoot = Split-Path -Parent $here
+if (-not (Test-Path (Join-Path $pkgRoot "CMakeLists.txt"))) {
+  if (Test-Path (Join-Path $here "CMakeLists.txt")) { $pkgRoot = $here }
+}
 . (Join-Path $here "_common.ps1")
 
 if (Request-AdminElevation -ScriptPath $MyInvocation.MyCommand.Path -ArgumentList @($(if ($Launch) { "-Launch" }))) {
   exit 0
 }
 
-Write-Host "=== Illustrated IF — C++ package setup (Admin) ===" -ForegroundColor Cyan
-Write-Host "Folder: $here"
+Write-Host "=== Illustrated IF - C++ package setup (Admin) ===" -ForegroundColor Cyan
+Write-Host "Package: $pkgRoot"
 Write-Host "This installs Git, CMake, and Visual Studio Build Tools (C++)."
 Write-Host "Build Tools download is large (~ few GB). Leave this window open."
 Write-Host ""
@@ -40,11 +44,11 @@ if (Test-Path $vswhere) {
 }
 
 if (-not $hasCpp) {
-  Write-Host "Installing Visual Studio 2022 Build Tools (C++ workload)…" -ForegroundColor Cyan
+  Write-Host "Installing Visual Studio 2022 Build Tools (C++ workload)..." -ForegroundColor Cyan
   Write-Host "If winget prompts, accept. This can take a long time."
   & winget install --id Microsoft.VisualStudio.2022.BuildTools -e --accept-package-agreements --accept-source-agreements --disable-interactivity --override "--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
   if ($LASTEXITCODE -notin 0, -1978335189) {
-    Write-Host "winget Build Tools exit $LASTEXITCODE — trying chocolatey-style fallback note…" -ForegroundColor Yellow
+    Write-Host "winget Build Tools exit $LASTEXITCODE - trying chocolatey-style fallback note..." -ForegroundColor Yellow
     Write-Host "Manual: https://visualstudio.microsoft.com/visual-cpp-build-tools/"
     Write-Host "Select workload: Desktop development with C++"
   }
@@ -52,15 +56,17 @@ if (-not $hasCpp) {
 
 Refresh-Path
 
-$marker = Join-Path $here ".prereqs-ok"
+$marker = Join-Path $pkgRoot ".prereqs-ok"
 Set-Content -Path $marker -Value "cpp-prereqs`n$(Get-Date -Format o)" -Encoding utf8
 
 Write-Host ""
 Write-Host "Prerequisites installed (or already present)." -ForegroundColor Green
-Write-Host "Build & run: double-click PLAY.bat  (runs cmake configure+build, then launches)"
+Write-Host "Play: double-click ""Play the Game""  (or PLAY.bat)"
 
 if ($Launch) {
-  Start-Process -FilePath (Join-Path $here "PLAY.bat")
+  $vbs = Join-Path $pkgRoot "Play the Game.vbs"
+  if (Test-Path $vbs) { Start-Process -FilePath $vbs }
+  else { Start-Process -FilePath (Join-Path $pkgRoot "PLAY.bat") }
 }
 
 Write-Done "C++ setup complete."

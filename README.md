@@ -17,8 +17,9 @@ npm start
 
 ### Desktop app (Electron)
 
-Friendly launcher (what you hand to a non-coder): double-click **`Illustrated IF Studio.vbs`**
-in the root. It starts the studio quietly (no console window) and opens the Electron editor.
+Friendly launcher (what you hand to a non-coder): double-click **`Illustrated IF Studio`**
+(the `.exe` in the root). It starts the studio quietly (no console window) and opens the
+Electron editor. Backup: `tools\emergency\Start the studio (backup).vbs`.
 
 For development: `npm run electron`, or the manual/debug launcher `tools\emergency\RUN-EDITOR.bat`
 (shows a console + errors; options `-ReuseServer`, `-Headless`, `-Port 8790`).
@@ -53,56 +54,59 @@ npm run build:python-exe -- --skip-build   # export Python package (+ BUILD-EXE.
 
 ## Send it to someone who can't code (hand-off zip)
 
-The recipient never has to touch a terminal, winget, `git`, or `npm`. Zip this folder,
-they unzip and double-click **one** thing.
+The recipient never has to touch a terminal, winget, `git`, or `npm`. Build the zip for
+them (don't Explorer-zip by hand — that can leak `finding-secrets` / `studio-settings.json`):
+
+```bash
+npm run package:handoff
+# optional: include your private game
+npm run package:handoff -- --include-finding-secrets
+# smaller zip (first launch downloads Electron):
+npm run package:handoff -- --no-node-modules
+```
+
+Output: `dist/illustrated-if-studio-handoff-YYYY-MM-DD.zip` (script lives in
+`tools/emergency/package-handoff.mjs`).
 
 **What they do (all they do):**
 
 1. **Unzip** the folder somewhere simple, e.g. `Documents\illustrated-if-studio`
    (avoid deep/OneDrive-synced paths; spaces are fine).
-2. Double-click **`Illustrated IF Studio`** (the `.vbs` launcher in the root).
+2. Double-click **`Illustrated IF Studio`** (the `.exe` in the root).
 3. Make their game. The window opens straight into the studio with `sample-project` loaded.
 
 **First-run install, handled quietly:** the launcher starts with **no visible console**.
 If Node.js is missing it shows a friendly pop-up ("Windows needs permission to finish
 installing…"), triggers the emergency setup once (UAC + winget, needs internet), then
 opens the studio. If Electron isn't bundled it fetches it once with a "getting ready…"
-pop-up. No wall of terminal text, and it never leaves them staring at a `cmd` prompt.
+pop-up. After Node is ready it may ask once: **also install tools for sharing games?**
+(Python / C++). No is fine — studio + HTML playtest still work; each export zip can
+install later. No wall of terminal text, and it never leaves them staring at a `cmd` prompt.
 
-The scary developer scripts (`SETUP-ADMIN.*`, manual `RUN-EDITOR.*`) live out of sight in
-**`tools/emergency/`** with a plain-language `README.txt` — recovery is there if they ever
-need it, but it isn't in their face.
+The scary developer scripts (`SETUP-ADMIN.*`, `SETUP-EXPORT-TOOLS.*`, manual `RUN-EDITOR.*`)
+live out of sight in **`tools/emergency/`** with a plain-language `README.txt`.
 
-**What to put in the zip vs. leave out** (zip from Explorer, or use the exclude list below):
+**What the packager includes / leaves out:**
 
 | Include | Leave out |
 |---------|-----------|
-| Everything under the folder: `Illustrated IF Studio.vbs`, `README.txt`, `tools/`, `server/`, `electron/`, `editor-web/`, `engine-*/`, `scripts/`, `projects/`, `package.json` | `.git/` (huge, unneeded), `dist/` (regenerates), `build/`, any `*.zip` archives, `studio-settings.json` (machine-local; harmless if left in, but delete it for a clean start) |
-
-- **`node_modules/`** (~320 MB, almost all Electron): **recommended to include** for a
-  non-coder — it makes the studio open instantly with no first-run download. Leave it out only
-  for a much smaller zip (the launcher then fetches Electron once, needs internet). Node.js
-  still must be installed either way (handled automatically by the launcher / emergency setup).
-- **Playwright** is only for the dev test suite — the recipient never needs it.
-- `projects/finding-secrets/` is git-ignored but **is on disk**, so an Explorer zip of the
-  folder **will include it**. It's not the default (the studio opens `sample-project`), but
-  **delete that subfolder before zipping** if you don't want to share it.
+| `Illustrated IF Studio.exe`, `README.txt`, `tools/`, `server/`, `electron/`, `editor-web/`, `engine-*/`, `scripts/`, `projects/` (minus finding-secrets by default), `package.json`, **`node_modules/`** (recommended) | `.git/`, `dist/`, `build/`, `*.zip`, `studio-settings.json`, agent junk; `projects/finding-secrets/` unless `--include-finding-secrets` |
 
 **Gotchas (all handled, but good to know):**
 - The one-time setup needs Administrator (UAC "Yes") + winget ("App Installer", preinstalled on
   Windows 10/11) + internet. The pop-up frames the UAC prompt so it isn't a surprise.
-- Windows SmartScreen/antivirus may flag `.vbs`/`.bat`/`.ps1` from a downloaded zip. Right-click
+- Windows SmartScreen/antivirus may flag `.exe`/`.vbs`/`.bat`/`.ps1` from a downloaded zip. Right-click
   the zip → **Properties → Unblock** *before* extracting, or on the warning choose
   **More info → Run anyway**.
 - If they already have Node.js and Electron is bundled, double-clicking the launcher opens the
-  studio immediately with no prompts at all.
+  studio immediately (aside from the one optional sharing-tools question the first time).
 
 ## Export packages
 
 From the editor **Export** menu, or CLI:
 
 ```bash
-npm run export:html     # dist/*-web.zip   (+ SETUP-ADMIN.bat / PLAY.bat)
+npm run export:html     # dist/*-web.zip
 npm run export:python   # dist/*-python.zip
 npm run export:cpp      # dist/*-cpp.zip
 npm run export:all
@@ -113,15 +117,17 @@ Each Windows zip includes:
 
 | Script | Purpose |
 |--------|---------|
-| `SETUP-ADMIN.bat` | UAC elevate → install prerequisites via winget |
-| `PLAY.bat` | Launch the game (installs prereqs first if missing) |
+| **`Play the Game`** (`.vbs`) | Primary: quiet launch + MsgBox wizard if tools are missing |
+| `PLAY.bat` | Technical / debug path (same play flow, visible console) |
+| `_emergency/SETUP-ADMIN.*` | UAC elevate → install prerequisites via winget (out of sight) |
 
 - **HTML** setup installs Node.js LTS  
-- **Python** setup installs Python 3.12 + pygame into a local `.venv` (PLAY.bat auto-installs on first launch too)  
-- **C++** setup installs Git, CMake, VS 2022 Build Tools (C++)
+- **Python** setup installs Python 3.12 + pygame into a local `.venv`  
+- **C++** setup installs Git, CMake, VS 2022 Build Tools (C++) — framed as a long download  
 
-Studio itself: the friendly launcher (`Illustrated IF Studio.vbs`) installs Node if it's
-missing. To do it by hand, run `tools\emergency\SETUP-ADMIN.bat`.
+Studio itself: the friendly launcher installs Node if missing, and may optionally offer
+Python/C++ sharing tools once. Manual: `tools\emergency\SETUP-ADMIN.bat` /
+`SETUP-EXPORT-TOOLS.bat`.
 
 ## Design (creator UX)
 

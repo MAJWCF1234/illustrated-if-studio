@@ -182,7 +182,14 @@ async function main() {
     else {
       const cfg = fs.readFileSync(path.join(body.folder, "js", "config.js"), "utf8");
       if (!cfg.includes("../project/")) find("error", "HTML export config.js not rewritten");
-      for (const f of ["PLAY.bat", "SETUP-ADMIN.bat", "SETUP-ADMIN.ps1", "_common.ps1"]) {
+      for (const f of [
+        "Play the Game.vbs",
+        "play-quiet.ps1",
+        "PLAY.bat",
+        path.join("_emergency", "SETUP-ADMIN.bat"),
+        path.join("_emergency", "SETUP-ADMIN.ps1"),
+        path.join("_emergency", "_common.ps1"),
+      ]) {
         if (!fs.existsSync(path.join(body.folder, f))) find("error", `HTML export missing ${f}`);
       }
     }

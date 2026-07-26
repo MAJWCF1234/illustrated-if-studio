@@ -1,4 +1,4 @@
-# Illustrated IF Studio — launch editor as an Electron desktop app
+# Illustrated IF Studio - launch editor as an Electron desktop app
 [CmdletBinding()]
 param(
   [switch]$Headless,
@@ -8,7 +8,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-# Lives in tools\emergency\ — studio root is two folders up.
+# Lives in tools\emergency\ - studio root is two folders up.
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Root = Split-Path -Parent (Split-Path -Parent $here)
 Set-Location $Root
@@ -31,7 +31,7 @@ if ($ReuseServer) { $env:IF_REUSE_SERVER = "1" } else { Remove-Item Env:IF_REUSE
 
 $electronPkg = Join-Path $Root "node_modules\electron\package.json"
 if (-not (Test-Path $electronPkg) -and -not $SkipInstall) {
-  Write-Step "Installing electron (one-time)…"
+  Write-Step "Installing electron (one-time)..."
   npm install --no-fund --no-audit electron@^37.10.3
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
@@ -42,11 +42,11 @@ if (-not (Test-Path $electronCli)) {
   exit 1
 }
 
-Write-Step "Launching Electron editor on port $Port…"
+Write-Step "Launching Electron editor on port $Port..."
 Write-Host "  Editor URL will be http://127.0.0.1:$Port/editor-web/"
 Write-Host "  Close the window to stop (server child exits with the app)."
 Write-Host ""
 
-# electron.cmd / cli.js — pass studio root as app path
+# electron.cmd / cli.js - pass studio root as app path
 & node $electronCli $Root @args
 exit $LASTEXITCODE

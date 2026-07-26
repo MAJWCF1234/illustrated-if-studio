@@ -44,7 +44,7 @@ def main() -> int:
         import pygame  # noqa: F401
     except ModuleNotFoundError:
         print("pygame is not installed.")
-        print("On Windows just double-click PLAY.bat — it sets everything up automatically.")
+        print("On Windows just double-click Play the Game — it sets everything up automatically.")
         print("Manual install:  python -m pip install -r requirements.txt")
         print()
         print("Starting text-only fallback...")
@@ -106,12 +106,14 @@ player (pygame) with backgrounds, character sprites, and the project's theme.
 
 ## Windows — just play (no coding needed)
 
-1. Double-click \`PLAY.bat\`.
-   - First launch installs Python 3.12 (via a one-time Administrator prompt if
-     it's missing) and the game libraries into a private \`.venv\` folder, then
-     starts the game. Later launches start instantly.
-2. That's it. If anything fails, double-click \`SETUP-ADMIN.bat\` once, then
-   \`PLAY.bat\` again.
+1. Double-click **\`Play the Game\`**.
+   - First launch may ask Windows for permission to install Python (one-time;
+     needs the internet), then installs game libraries into a private \`.venv\`
+     folder and starts the game. Later launches start instantly.
+2. That's it. If anything fails, open \`_emergency\`, run \`SETUP-ADMIN.bat\`
+   once, then try **Play the Game** again.
+
+Technical: \`PLAY.bat\` in this folder does the same thing with a visible console.
 
 ## Run manually
 
@@ -134,9 +136,9 @@ re-export from Illustrated IF Studio.
 
 ## Build a standalone exe (Windows)
 
-Double-click \`BUILD-EXE.bat\` — installs PyInstaller and produces
-\`dist-exe\\<id>.exe\` with Python, pygame, the engine, and the project data
-frozen inside.
+In \`_emergency\`, double-click \`BUILD-EXE.bat\` — installs PyInstaller and
+produces \`dist-exe\\<id>.exe\` with Python, pygame, the engine, and the project
+data frozen inside.
 
 Or manually:
 
@@ -144,6 +146,21 @@ Or manually:
 pip install pyinstaller -r requirements.txt
 pyinstaller --onefile --windowed --add-data "project;project" --add-data "if_engine;if_engine" --add-data "if_gui;if_gui" app.py
 \`\`\`
+`
+  );
+  fs.writeFileSync(
+    path.join(staging, "README.txt"),
+    `${project.title}
+
+How to play (Windows)
+---------------------
+1. Double-click:  Play the Game
+2. The game window opens.
+
+First time may ask Windows for permission to install Python (needs internet,
+once). Click YES and wait.
+
+If something goes wrong: open _emergency and read README.txt.
 `
   );
   fs.writeFileSync(

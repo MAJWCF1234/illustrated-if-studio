@@ -1,6 +1,6 @@
 @echo off
-:: Elevate + run PowerShell SETUP-ADMIN.ps1 (UAC prompt)
-:: Lives in _emergency\ next to SETUP-ADMIN.ps1 and _common.ps1
+:: Optional: install Python / C++ tools so exported games play without per-zip setup.
+:: Prefer letting the studio launcher ask you - only run this if you chose to skip.
 setlocal
 cd /d "%~dp0"
 
@@ -11,7 +11,7 @@ if %errorlevel% neq 0 (
   exit /b
 )
 
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0SETUP-ADMIN.ps1" %*
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0SETUP-EXPORT-TOOLS.ps1" %*
 set ERR=%ERRORLEVEL%
 if %ERR% neq 0 (
   echo Setup failed with exit code %ERR%

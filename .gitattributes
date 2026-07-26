@@ -16,3 +16,8 @@
 *.png binary
 *.jpg binary
 *.zip binary
+*.ico binary
+*.exe binary
+
+# The launcher is C# for the .NET Framework compiler built into Windows
+*.cs text eol=crlf

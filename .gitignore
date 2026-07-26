@@ -10,11 +10,18 @@ build/
 # Machine-local studio state: active project, absolute export/import paths
 studio-settings.json
 
+# One-time "also set up sharing tools?" prompt markers
+tools/.export-tools-offered
+tools/.export-tools-ready
+
 # Editor autosave backups — git is the history now
 *.bak
 
 # Player save slots are runtime data; savesDir() recreates them on demand
 projects/*/saves/
+
+# Launcher diagnostics written next to the studio on every start
+tools/logs/
 
 # Game content kept local-only — never committed to the platform repo.
 # The studio still discovers it on disk (listProjects reads projects/).

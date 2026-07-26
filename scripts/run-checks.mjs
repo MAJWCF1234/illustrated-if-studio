@@ -14,6 +14,7 @@ function run(cmd, args, opts = {}) {
 }
 
 run(process.execPath, ["scripts/validate-project.mjs", "projects/sample-project"]);
+run(process.execPath, ["scripts/check-windows-scripts.mjs"]);
 run(process.execPath, ["scripts/parity-test.mjs"]);
 
 const pyCandidates = [

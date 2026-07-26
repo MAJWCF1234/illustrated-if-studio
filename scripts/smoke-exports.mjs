@@ -79,20 +79,26 @@ async function main() {
     "index.html",
     "js/config.js",
     "project/project.json",
-    "SETUP-ADMIN.bat",
-    "SETUP-ADMIN.ps1",
+    "Play the Game.vbs",
+    "play-quiet.ps1",
     "PLAY.bat",
-    "_common.ps1",
+    "_emergency/SETUP-ADMIN.bat",
+    "_emergency/SETUP-ADMIN.ps1",
+    "_emergency/_common.ps1",
+    "_emergency/README.txt",
     "start-server.mjs",
   ]);
   assertPackage(py.folder, [
     "app.py",
     "if_engine/runtime.py",
     "project/project.json",
-    "SETUP-ADMIN.bat",
-    "SETUP-ADMIN.ps1",
+    "Play the Game.vbs",
+    "play-quiet.ps1",
     "PLAY.bat",
-    "_common.ps1",
+    "_emergency/SETUP-ADMIN.bat",
+    "_emergency/SETUP-ADMIN.ps1",
+    "_emergency/_common.ps1",
+    "_emergency/BUILD-EXE.bat",
   ]);
   assertPackage(cpp.folder, [
     "CMakeLists.txt",
@@ -103,10 +109,12 @@ async function main() {
     "include/saves.hpp",
     "include/conditions.hpp",
     "project/project.json",
-    "SETUP-ADMIN.bat",
-    "SETUP-ADMIN.ps1",
+    "Play the Game.vbs",
+    "play-quiet.ps1",
     "PLAY.bat",
-    "_common.ps1",
+    "_emergency/SETUP-ADMIN.bat",
+    "_emergency/SETUP-ADMIN.ps1",
+    "_emergency/_common.ps1",
   ]);
 
   const cfg = fs.readFileSync(path.join(html.folder, "js", "config.js"), "utf8");

@@ -33,8 +33,11 @@
     "test:python-rollback": "node scripts/run-python-rollback-smoke.mjs",
     "test:cpp": "node scripts/cpp-parity-smoke.mjs",
     "build:python-exe": "node scripts/build-python-exe.mjs",
+    "build:launcher": "node scripts/build-launcher.mjs",
+    "package:handoff": "node tools/emergency/package-handoff.mjs",
     "bug-hunt": "node scripts/bug-hunt.mjs",
     "check": "node scripts/run-checks.mjs",
+    "check:windows": "node scripts/check-windows-scripts.mjs",
     "check:cpp": "node scripts/cpp-parity-smoke.mjs"
   },
   "engines": {

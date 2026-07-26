@@ -4,32 +4,34 @@ Make your own illustrated text adventures - the kind of hand-drawn, choose-your-
 web games you'd have played in a browser years ago. No coding needed.
 
 
-HOW TO START (3 steps)
+HOW TO START (2 steps)
 ----------------------
 
   1. Unzip this whole folder somewhere easy, like your Documents.
 
   2. Double-click:   Illustrated IF Studio
 
-  3. The studio window opens. Start making your game!
+The studio window opens with a sample game already loaded. Start making yours.
 
 
 THAT'S IT.
 ----------
 
-The very first time you open it, Windows may ask for permission to finish a
-quick one-time setup (it needs the internet for a minute). Just click YES and
-wait - the studio window opens by itself when it's ready. After that, opening
-the studio is instant.
+Nothing to install, nothing to sign up for. Write scenes on the Story tab, style
+the whole game on the Design tab, and hit Play to test it any time.
 
-A sample game is already loaded so you have something to play with right away.
+The first time you open anything you unzipped, Windows sometimes shows a blue
+"Windows protected your PC" box. That's Windows being careful about files that
+came from the internet, not a problem with the studio - click "More info", then
+"Run anyway".
 
 
 IF IT WON'T OPEN
 ----------------
 
 Open the "tools" folder, then "emergency", and read the short note in there.
-It walks you through the one-click fix.
+It walks you through the one-click fix. If that doesn't do it, ask Maddie -
+there's a details file in tools\logs she can look at.
 
 
 Have fun. - made for you
